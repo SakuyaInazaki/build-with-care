@@ -1,2 +1,8 @@
 .DS_Store
 docs/track3-detail.md
+node_modules/
+dist/
+.decision-stream/
+store/
+/db.sql
+/db.sqlite
