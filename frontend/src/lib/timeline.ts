@@ -51,6 +51,9 @@ const titles: Record<string, string> = {
   'run.error': '执行遇到问题',
   'run.failed': '执行遇到问题',
   'run.input-added': '加入新要求',
+  'run.archived': '归档任务',
+  'run.restored': '恢复任务',
+  'run.archive-unchanged': '归档状态未变',
   'run.continuing': '继续执行',
   'run.explicit-continuation': '继续执行',
   'run.resume-requested': '继续任务',
@@ -198,6 +201,10 @@ export function timelineEntries(events: AppEvent[], run: RunState): TimelineEntr
       if (event.type === 'grill.updated')
         summary = data.status === 'confirm' ? '整理确认清单' : `第 ${data.round} 轮澄清`
       if (event.type === 'model.request') summary = data.model ?? run.workerLabel
+      if (event.type === 'run.archived') summary = '任务已移入归档。'
+      if (event.type === 'run.restored') summary = '任务已恢复到工作空间。'
+      if (event.type === 'run.archive-unchanged')
+        summary = data.archive ? '任务已处于归档状态。' : '任务当前未归档。'
       if (event.type.startsWith('unit.'))
         summary =
           data.summary ??

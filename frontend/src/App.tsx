@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  Archive,
+  ArchiveRestore,
   ArrowLeft,
   ArrowRight,
   Bell,
@@ -42,6 +44,10 @@ const rememberLanding = () => {
   try { localStorage.setItem(landingStorageKey, 'yes') } catch { /* The current session still proceeds. */ }
 }
 const taskLabel = (run: RunState) => run.title.split(/[，。；;\n]/)[0].slice(0, 24)
+const supportsWorkUnits = (version: string) => {
+  const number = Number(version.match(/^unified-work-units-v(\d+)$/)?.[1])
+  return Number.isFinite(number) && number >= 3
+}
 const views = [
   { id: 'board' as const, label: '决策看板', icon: LayoutDashboard },
   { id: 'artifacts' as const, label: '成果与验证', icon: FolderOpen },
@@ -53,10 +59,12 @@ export default function App() {
   const [runs, setRuns] = useState<RunState[]>([])
   const [settings, setSettings] = useState<PublicSettings | null>(null)
   const [backendVersion, setBackendVersion] = useState('')
+  const [capabilities, setCapabilities] = useState<string[]>([])
   const [entryView, setEntryView] = useState<EntryView>(() =>
     onWelcomeRoute() ? 'landing' : hasEnteredLanding() ? 'workspace' : 'checking',
   )
   const [selected, setSelected] = useState<string | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
   const [view, setView] = useState<View>('board')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -84,10 +92,13 @@ export default function App() {
       setRuns(result.runs)
       setSettings(result.settings)
       setBackendVersion(result.backendVersion ?? '')
+      setCapabilities(result.capabilities ?? [])
       if (onWelcomeRoute()) {
         setEntryView('landing')
       } else {
-        const unfinished = result.runs.some((run) => !['completed', 'stopped'].includes(run.status))
+        const unfinished = result.runs.some(
+          (run) => !run.archivedAt && !['completed', 'stopped'].includes(run.status),
+        )
         if (hasEnteredLanding() || unfinished) {
           if (unfinished) rememberLanding()
           setEntryView('workspace')
@@ -116,6 +127,7 @@ export default function App() {
       // Renew the process-scoped cookie after a service update without resetting user input.
       const result = await bootstrap()
       setBackendVersion(result.backendVersion ?? '')
+      setCapabilities(result.capabilities ?? [])
     } catch { /* EventSource retries while the local service is unavailable. */ }
   }, [])
   useEffect(() => {
@@ -150,13 +162,18 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [notice])
   const run = runs.find((entry) => entry.id === selected)
+  const currentRuns = runs.filter((entry) => !entry.archivedAt)
+  const archivedRuns = runs.filter((entry) => !!entry.archivedAt)
+  const listedRuns = showArchived ? archivedRuns : currentRuns
   const openWorkspace = useCallback(() => {
     rememberLanding()
     if (onWelcomeRoute()) history.pushState(history.state, '', '/')
     setEntryView('workspace')
   }, [])
-  const select = (id: string | null) => {
+  const select = (id: string | null, archiveView?: boolean) => {
     setSelected(id)
+    if (archiveView !== undefined) setShowArchived(archiveView)
+    else if (id) setShowArchived(!!runs.find((entry) => entry.id === id)?.archivedAt)
     setView('board')
     setMobileOpen(false)
     setError('')
@@ -200,7 +217,31 @@ export default function App() {
     )
     setNotice('任务已继续')
   }
+  const setArchived = async (archive: boolean) => {
+    if (!run) return
+    update(
+      await api<RunState>(`/api/runs/${run.id}/archive`, {
+        requestId: requestId(),
+        archive,
+      }),
+    )
+    setShowArchived(archive)
+    setNotice(archive ? '任务已归档' : '任务已恢复')
+  }
   const pending = run?.gates.filter((gate) => gate.status === 'pending').length ?? 0
+  const archiveSupported = capabilities.includes('task-archive-v1')
+  const archiveEligible =
+    !!run &&
+    ['ready', 'completed', 'error', 'stopped', 'interrupted'].includes(run.status) &&
+    pending === 0
+  const archiveDisabledReason =
+    run && !run.archivedAt && !archiveEligible
+      ? isActive(run)
+        ? '请先停止任务，再归档'
+        : pending
+          ? '请先处理待决定事项，再归档'
+          : '当前任务暂时不能归档'
+      : ''
   const create = () =>
     perform(async () => {
       if (!settings?.configured) {
@@ -275,15 +316,22 @@ export default function App() {
           </span>
           <span>看着办</span>
         </button>
-        <button className="new-task button" onClick={() => select(null)}>
+        <button className="new-task button" onClick={() => select(null, false)}>
           <Plus size={17} />
           新建任务
         </button>
         <p className="nav-caption">工作空间</p>
-        <button className={`nav-item ${!run ? 'selected' : ''}`} onClick={() => select(null)}>
+        <button className={`nav-item ${!run && !showArchived ? 'selected' : ''}`} onClick={() => select(null, false)}>
           <LayoutDashboard size={18} />
           任务概览
         </button>
+        {capabilities.includes('task-archive-v1') && (
+          <button className={`nav-item ${!run && showArchived ? 'selected' : ''}`} onClick={() => select(null, true)}>
+            <Archive size={18} />
+            已归档
+            <span className="nav-item-count">{archivedRuns.length}</span>
+          </button>
+        )}
         {run && (
           <>
             <p className="nav-caption current-caption">当前任务</p>
@@ -308,11 +356,11 @@ export default function App() {
         )}
         <div className="recent-heading">
           <p className="nav-caption">最近任务</p>
-          <span>{runs.length}</span>
+          <span>{currentRuns.length}</span>
         </div>
         <div className="recent-list">
-          {runs.length ? (
-            runs.slice(0, 12).map((entry) => (
+          {currentRuns.length ? (
+            currentRuns.slice(0, 12).map((entry) => (
               <button
                 key={entry.id}
                 className={`recent-task ${entry.id === selected ? 'current' : ''}`}
@@ -324,7 +372,7 @@ export default function App() {
               </button>
             ))
           ) : (
-            <p className="sidebar-empty">暂无任务</p>
+            <p className="sidebar-empty">暂无进行中的任务</p>
           )}
         </div>
         <div className="sidebar-footer">
@@ -351,7 +399,7 @@ export default function App() {
             >
               <Menu size={20} />
             </button>
-            <span>{run ? taskLabel(run) : '任务概览'}</span>
+            <span>{run ? taskLabel(run) : showArchived ? '已归档' : '任务概览'}</span>
           </div>
           <div className="topbar-actions">
             <AttentionControl active={attention.active} toggle={() => void attention.toggle()} />
@@ -407,16 +455,20 @@ export default function App() {
           ) : !run ? (
             <section className="overview">
               <div className="overview-heading">
-                <span className="eyebrow">你的工作空间</span>
-                <h1>
-                  下一件想做的事，
-                  <br />
-                  <span>
-                    <ShuffleLabel>从这里开始。</ShuffleLabel>
-                  </span>
-                </h1>
+                <span className="eyebrow">{showArchived ? '任务存档' : '你的工作空间'}</span>
+                {showArchived ? (
+                  <h1>已归档的任务</h1>
+                ) : (
+                  <h1>
+                    下一件想做的事，
+                    <br />
+                    <span>
+                      <ShuffleLabel>从这里开始。</ShuffleLabel>
+                    </span>
+                  </h1>
+                )}
               </div>
-              <form
+              {!showArchived && <form
                 className="task-composer"
                 onSubmit={(event) => {
                   event.preventDefault()
@@ -439,29 +491,30 @@ export default function App() {
                     {settings.configured ? '开始澄清需求' : '连接模型并开始'}
                   </button>
                 </div>
-              </form>
+              </form>}
 
               <div className="section-heading">
-                <h2>最近的任务</h2>
-                <span className="muted">{runs.length ? `${runs.length} 个任务` : ''}</span>
+                <h2>{showArchived ? '已归档' : '最近的任务'}</h2>
+                <span className="muted">{listedRuns.length ? `${listedRuns.length} 个任务` : ''}</span>
               </div>
-              {runs.length ? (
+              {listedRuns.length ? (
                 <div className="task-list">
-                  {runs.map((entry) => (
+                  {listedRuns.map((entry) => (
                     <button className="task-row" key={entry.id} onClick={() => select(entry.id)}>
                       <span className="task-row-icon">
-                        <FolderOpen size={21} />
+                        {entry.archivedAt ? <Archive size={21} /> : <FolderOpen size={21} />}
                       </span>
                       <span className="task-row-copy">
                         <strong>{taskLabel(entry)}</strong>
                         <small>
                           {dateLabel(entry.createdAt)}
                           {entry.mode === 'demo' ? ' · 测试' : ''}
+                          {entry.archivedAt ? ` · 归档于 ${dateLabel(entry.archivedAt)}` : ''}
                         </small>
                       </span>
-                      <span className={`status-label ${entry.status}`}>
-                        <span className={`status-dot ${entry.status}`} />
-                        {STATUS_LABELS[entry.status]}
+                      <span className={`status-label ${entry.archivedAt ? 'archived' : entry.status}`}>
+                        {entry.archivedAt ? <Archive size={13} /> : <span className={`status-dot ${entry.status}`} />}
+                        {entry.archivedAt ? '已归档' : STATUS_LABELS[entry.status]}
                       </span>
                       <ChevronRight size={17} />
                     </button>
@@ -469,9 +522,9 @@ export default function App() {
                 </div>
               ) : (
                 <div className="first-task-note">
-                  <FolderOpen size={22} />
+                  {showArchived ? <Archive size={22} /> : <FolderOpen size={22} />}
                   <div>
-                    <strong>还没有任务</strong>
+                    <strong>{showArchived ? '暂无归档任务' : '还没有任务'}</strong>
                   </div>
                 </div>
               )}
@@ -480,9 +533,9 @@ export default function App() {
             <section className="workspace" key={run.id}>
               <div className="workspace-heading">
                 <div>
-                  <button className="back-link" onClick={() => select(null)}>
+                  <button className="back-link" onClick={() => select(null, !!run.archivedAt)}>
                     <ArrowLeft size={14} />
-                    所有任务
+                    {run.archivedAt ? '已归档' : '所有任务'}
                   </button>
                   <h1>
                     {run.status === 'ready' && view === 'board'
@@ -495,7 +548,12 @@ export default function App() {
                     <span className={`status-dot ${run.status}`} />
                     {run.reviewFailure ? '审查需要重试' : STATUS_LABELS[run.status]}
                   </span>
-                  {['interrupted', 'stopped', 'error'].includes(run.status) && (
+                  {run.archivedAt && (
+                    <span className="status-label archived">
+                      <Archive size={13} />已归档
+                    </span>
+                  )}
+                  {!run.archivedAt && ['interrupted', 'stopped', 'error'].includes(run.status) && (
                     <button
                       className="button primary"
                       disabled={busy}
@@ -504,7 +562,7 @@ export default function App() {
                       {busy ? <Spinner /> : <ArrowRight size={15} />}继续任务
                     </button>
                   )}
-                  {isActive(run) && (
+                  {!run.archivedAt && isActive(run) && (
                     <button
                       className="button secondary stop-button"
                       disabled={busy || run.status === 'stopping'}
@@ -512,6 +570,20 @@ export default function App() {
                     >
                       {run.status === 'stopping' ? <Spinner /> : <Square size={13} />}停止任务
                     </button>
+                  )}
+                  {archiveSupported && (
+                    <span className="archive-action">
+                      <button
+                        className="button secondary"
+                        disabled={busy || (!run.archivedAt && !archiveEligible)}
+                        title={archiveDisabledReason || undefined}
+                        onClick={() => void perform(() => setArchived(!run.archivedAt))}
+                      >
+                        {busy ? <Spinner /> : run.archivedAt ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+                        {run.archivedAt ? '恢复任务' : '归档任务'}
+                      </button>
+                      {archiveDisabledReason && <small>{archiveDisabledReason}</small>}
+                    </span>
                   )}
                 </div>
               </div>
@@ -522,13 +594,13 @@ export default function App() {
               )}
               {run.error && (
                 <div className="error-banner" role="status">
-                  {backendVersion === 'unified-work-units-v3' && run.error === '本轮已达到 30 次模型请求上限，请检查过程后新建任务'
+                  {supportsWorkUnits(backendVersion) && run.error === '本轮已达到 30 次模型请求上限，请检查过程后新建任务'
                     ? '此前运行因旧版次数上限中断。上限已移除，点击“继续任务”即可接着完成。'
                     : run.error}
                 </div>
               )}
               <RunProgress run={run} />
-              {run.reviewFailure && run.status === 'running' && (
+              {!run.archivedAt && run.reviewFailure && run.status === 'running' && (
                 <div className="error-banner review-retry" role="alert">
                   <span>{run.reviewFailure.message}</span>
                   <button
@@ -550,10 +622,16 @@ export default function App() {
                   </button>
                 </div>
               )}
-              {run.status === 'ready' && view === 'board' ? (
-                <Intake key={`${run.id}:${run.grill?.round ?? 0}`} run={run} update={update} notify={setNotice} />
+              {!run.archivedAt && run.status === 'ready' && view === 'board' ? (
+                <Intake
+                  key={`${run.id}:${run.grill?.round ?? 0}`}
+                  run={run}
+                  update={update}
+                  notify={setNotice}
+                  batchEnabled={capabilities.includes('grill-batch-v1')}
+                />
               ) : view === 'board' ? (
-                <Board run={run} update={update} stop={stop} notify={setNotice} canRecheck={backendVersion === 'unified-work-units-v3'} />
+                <Board run={run} update={update} stop={stop} notify={setNotice} canRecheck={!run.archivedAt && supportsWorkUnits(backendVersion)} />
               ) : view === 'artifacts' ? (
                 <Artifacts run={run} />
               ) : view === 'activity' ? (

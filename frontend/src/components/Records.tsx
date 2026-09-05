@@ -277,32 +277,39 @@ export function RecordView({
           </p>
         </section>
         <aside>
-          <form
-            className="reflection-panel"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void save()
-            }}
-          >
-            <h2>留给下次的自己</h2>
-            <p>回看这些决定，下次你会提前说清什么？</p>
-            <label htmlFor="reflection">我的复盘</label>
-            <textarea
-              id="reflection"
-              value={reflection}
-              maxLength={3000}
-              onChange={(event) => setReflection(event.target.value)}
-              placeholder="写下这次的发现…"
-            />
-            <button className="button secondary" disabled={busy}>
-              {busy ? <Spinner /> : <Check size={15} />}保存复盘
-            </button>
-            {message && (
-              <p className="saved-note" role="status">
-                {message}
-              </p>
-            )}
-          </form>
+          {run.archivedAt ? (
+            <section className="reflection-panel" aria-label="已保存的复盘">
+              <h2>留给下次的自己</h2>
+              <p>{run.reflection || '尚未保存复盘'}</p>
+            </section>
+          ) : (
+            <form
+              className="reflection-panel"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void save()
+              }}
+            >
+              <h2>留给下次的自己</h2>
+              <p>回看这些决定，下次你会提前说清什么？</p>
+              <label htmlFor="reflection">我的复盘</label>
+              <textarea
+                id="reflection"
+                value={reflection}
+                maxLength={3000}
+                onChange={(event) => setReflection(event.target.value)}
+                placeholder="写下这次的发现…"
+              />
+              <button className="button secondary" disabled={busy}>
+                {busy ? <Spinner /> : <Check size={15} />}保存复盘
+              </button>
+              {message && (
+                <p className="saved-note" role="status">
+                  {message}
+                </p>
+              )}
+            </form>
+          )}
         </aside>
       </div>
       {error && !deleting && (

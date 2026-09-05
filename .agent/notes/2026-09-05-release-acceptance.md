@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | 当前后端与前端测试 | PASS | 最终源码下产品后端 62/62、前端 14/14 通过；另外旧参考运行时 82/82 通过，后者单独记录，不并入产品测试数。隔离浏览器脚本需要临时 loopback 监听，沙箱内 `listen EPERM 127.0.0.1` 后以同一既有脚本允许 loopback 重跑通过。 |
 | 类型检查 | PASS | 产品后端、前端构建内的 TypeScript 检查和旧参考运行时类型检查均通过。 |
-| 生产构建 | PASS | paper landing、最终看板归属、任务记录分离与最终卡片状态修复合并后 `npm --prefix frontend run build` 通过。主工作空间 284.43 kB（gzip 89.95 kB），按需 Three.js 块 704.69 kB（gzip 180.10 kB）；Vite 给出单块超过 500 kB 警告，不影响构建退出码。返回用户直达工作空间时浏览器确认没有请求 Three.js 块。 |
+| 生产构建 | PASS | paper landing、最终看板归属、任务记录分离、归档与 Grill 批量界面合并后生产构建通过。主工作空间 288.28 kB（gzip 91.35 kB），按需 Three.js 块 704.69 kB（gzip 180.10 kB）；Vite 给出单块超过 500 kB 警告，不影响构建退出码。返回用户直达工作空间时浏览器确认没有请求 Three.js 块。 |
 | diff 空白检查 | PASS | `git diff --check` 通过。 |
 | 既有 intake 浏览器回归 | PASS | 隔离 Chrome：多选、单选、仅自由输入、取消勾选、失败保留、换题清空、无轮次设计说明；工作单元概览、单元隔离、按需完整原始记录、收起步骤。 |
 | 既有 notification 浏览器回归 | PASS | 隔离 Chrome 模拟 Notification：只在点击后申请权限、后台订阅、页内提醒、后台系统通知、重复去重、点击返回、处理后关闭、关闭偏好与刷新、权限拒绝回退、单项关闭跨重放与刷新、新事项再次出现、SSE 重连更新后端能力。系统通知本身未在真实 macOS 权限链路实测。 |
@@ -28,12 +28,13 @@
 | 欢迎页直达 `/welcome`、首次访问、返回用户绕过、浏览器前进后退 | PASS | 首次根路径内部转为 `/welcome`；直接 `/welcome` 可见；进入后 Back 回欢迎页、Forward 回工作空间。已进入标识的返回用户直达 `/` 且不下载 Three.js 块。 |
 | 欢迎页移动端、键盘、减少动态效果、WebGL fallback | PASS | 390×844 无横向溢出，移动端使用 3600 粒子；减少动态效果下 transition 为 `0s`、进入约 218 ms；强制 WebGL 初始化失败仍形成静态 D 和可用入口。 |
 | 应用名与导航 | PASS | 源码和浏览器可见名称为“看着办”；主导航是任务概览、决策看板、成果与验证、过程时间线、我的判断。 |
+| 任务归档、恢复、过滤与只读查看 | PASS | v4 capability 下默认列表排除归档项并提供带数量的“已归档”入口；归档任务可查看看板、成果、时间线和判断，执行修改入口隐藏。隔离 API/浏览器覆盖归档、恢复、reload 和活动任务拒绝；真实页面只读确认 `ready(confirm)` 标题旁“归档任务”可见且启用，运行态显示禁用按钮与停止提示。归档不改变卡片分栏或验证证据。 |
 | 空任务概览 | PASS | 隔离空 `runs: []` 显示“暂无任务”和“还没有任务”，桌面及 400 px 页面无横向溢出。 |
 | 设置弹窗桌面/窄屏四角圆角 | PASS | 桌面和 400×760 computed `border-radius: 20px`；窄屏左右各 19 px，document scrollWidth = innerWidth = 400。Escape 关闭正常。 |
 | DeepSeek 密钥、双模型选择、双推理强度、保存后刷新/重开 | PASS（模拟 API） | 浏览器实际填写共享密钥、分别选择 V4 Pro/Flash 和 max/none；请求体值准确，成功后密钥输入清空且公开设置不回显。后端现有测试覆盖 0600 持久文件与重启恢复。 |
 | 自定义端点与两角色独立配置 | PASS（模拟 API） | 浏览器分别保存 `127.0.0.1`/`localhost` 端点、模型与来源；弹窗关闭重开和页面 reload 后值均保留。后端现有配置测试覆盖同端点保留密钥及换端点不复用。 |
 | 设置保存/连接成功与失败恢复 | PASS | 保存显示有底色、边框和阴影的绿色 `role=status`“设置已保存”；连接成功显示同级醒目状态“连接成功，服务已返回响应”；注入 503 后显示 `role=alert` 且可继续操作。 |
-| 需求澄清多选/单选/自由输入 | PASS | 既有隔离 Chrome 回归实际点击和请求体断言通过；页面没有“最多 5 题”等设计说明小字。 |
+| 需求澄清批量、多选、空选、自由输入与恢复 | PASS | capability 下每批三题宽屏并排、390px 纵排；隔离 Chrome 实际覆盖独立多选、部分空题、自由补充、第二批全空、最终未决门禁、失败后保留、pendingAnswers 刷新恢复、未编辑重试不覆盖、编辑后整批更新及较少题旧会话。无 capability 时既有单题协议回归通过；页面没有题数预算等实现说明。 |
 | 运行进展、慢审查、审查失败重试、继续任务 | PASS（模拟与组件级） | 现有测试覆盖慢审查不放行、原地重试、取消请求和 v3 历史错误恢复；未在真实外部模型长请求上重复演示。 |
 | 四色看板、等高、折叠、栏内滚动 | PASS | 最终 bundle 四栏均为 595 px；卡片背景实测红 `rgb(242,152,146)`、灰 `rgb(178,183,199)`、蓝 `rgb(145,187,243)`、绿 `rgb(133,209,171)`。长栏 clientHeight 527、scrollHeight 2765 且 scrollTop 可变；折叠/展开保留等高。 |
 | 看板双栏详情、四个红卡动作、蓝卡三状态 | PASS | 浏览器点开红卡后双栏详情可见，局部精确确认四个动作各一项；蓝卡显示“未审阅/已认可”。没有单一模态遮住并列卡片。 |
@@ -61,14 +62,16 @@
 - `/private/tmp/kanzheban-workspace-entered-settled.png`
 - `/private/tmp/kanzheban-board-all-components.png`
 - `/private/tmp/kanzheban-settings-mobile.png`
+- `/private/tmp/kanzheban-grill-3x3-desktop.png`
+- `/private/tmp/kanzheban-grill-3x3-mobile.png`
 
 ## 冻结 24 项正式评测状态
 
 | 用例 | 状态 | 本轮可用证据/缺口 |
 | --- | --- | --- |
 | G1 | PASS | 后端 Grill 隔离测试通过。 |
-| G2 | PASS | 浏览器实际多选/单选/自由输入通过。 |
-| G3 | PASS | 后端现有最多五轮测试通过。 |
+| G2 | PASS | 浏览器实际批量多选、单题多选、自由输入、空选和失败恢复通过。 |
+| G3 | PASS | 新会话固定两批各三题、总计六题；第一批后不能提前确认，第二批后才进入最终清单。后端既有 Grill 用例与一次性 3+3 探针通过，前端批量浏览器夹具覆盖同一边界。 |
 | G4 | PASS | 后端现有确认门槛测试通过。 |
 | I1 | PASS | 真实 adapter + 本机模拟上游的跨单元审查输入隔离测试通过。 |
 | I2 | PASS | 同单元工具序列测试通过。 |
@@ -97,9 +100,9 @@
 
 ## 部署与生产只读 smoke
 
-源码提交 `8805d95bae4fe7c4737dec1558056a5607b525ac` 推送到既有远端分支后，部署 helper 连续确认全部任务已完成、没有活动 Grill、旧服务身份与源码提交符合预期，才重启本机 4322。新进程 bootstrap 返回 `unified-work-units-v3`；两条任务的 completed 状态与 revision、持久化文件哈希及公开设置均未改变，没有自动恢复模型、重新检查或补造验证。
+源码提交 `8805d95bae4fe7c4737dec1558056a5607b525ac` 推送后先部署 v3；随后归档与 Grill 3+3 首批按同一空闲守卫更新到 `unified-work-units-v4`，capabilities 精确为 `task-archive-v1`、`grill-batch-v1`。切换前后三条任务分别保持 ready(confirm)、completed、completed，status、revision、files、lastEventSeq、Grill 和公开设置逐项一致，没有自动恢复模型、重新检查、归档或补造验证。
 
-独立 disposable Chrome 对实际 4322 做了只读生产 smoke：`/welcome` 与 `/` 正常加载；session cookie 为 HttpOnly、SameSite=Strict；已有成果 iframe 同源响应 200 并完成页面与脚本加载；带 cookie 的直接成果读取为 200，全新无 cookie context 为 401；源码切换内容与直接读取一致。页面错误、console error 和失败请求均为 0。该 smoke 证明本次部署链和成果认证在这条现有成果上可用，不改变上面的冻结评测失败项。
+独立 disposable Chrome 对实际 4322 做了只读生产 smoke：`/welcome` 与 `/` 正常加载；session cookie 为 HttpOnly、SameSite=Strict；v4 capability 与归档导航正常；ready(confirm) 的归档按钮可见且启用但未点击；已有成果 iframe 同源响应 200 并完成页面与脚本加载；带 cookie 的直接成果读取为 200，全新无 cookie context 为 401；源码切换内容与直接读取一致。页面错误和 console error 为 0；切换任务时旧 SSE 出现一次预期 `ERR_ABORTED`，没有非预期失败请求。该 smoke 证明本次部署链、归档入口和成果认证在现有数据上可用，不改变上面的冻结评测失败项。
 
 ## Git、敏感文件、生成物与依赖卫生
 

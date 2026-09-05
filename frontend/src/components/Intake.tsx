@@ -8,19 +8,48 @@ export function Intake({
   run,
   update,
   notify,
+  batchEnabled = false,
 }: {
   run: RunState
   update: (run: RunState) => void
   notify: (text: string) => void
+  batchEnabled?: boolean
 }) {
-  const [answer, setAnswer] = useState('')
-  const [choices, setChoices] = useState<string[]>([])
+  const grill = run.grill
+  const questions = grill?.status === 'question'
+    ? batchEnabled && grill.questions?.length
+      ? grill.questions
+      : grill.question
+        ? [grill.question]
+        : []
+    : []
+  const questionKey = (index: number) => questions[index]?.id ?? `${index}:${questions[index]?.title ?? ''}`
+  const pendingAnswer = (index: number) => {
+    const question = questions[index]
+    return grill?.pendingAnswers?.find((entry) =>
+      question?.id ? entry.questionId === question.id : entry.question === question?.title,
+    )
+  }
+  const [supplements, setSupplements] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      questions.map((_, index) => [questionKey(index), pendingAnswer(index)?.supplement ?? '']),
+    ),
+  )
+  const [selections, setSelections] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(
+      questions.map((_, index) => [questionKey(index), pendingAnswer(index)?.choices ?? []]),
+    ),
+  )
+  const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const grill = run.grill
-  const combinedAnswer = choices.length
-    ? `已选选项：\n${choices.map((choice) => `- ${choice}`).join('\n')}${answer.trim() ? `\n\n补充回答：\n${answer.trim()}` : ''}`
-    : answer.trim()
+  const pendingLocked = !!grill?.pendingAnswers?.length
+  const legacyKey = questionKey(0)
+  const legacyChoices = selections[legacyKey] ?? []
+  const legacySupplement = supplements[legacyKey]?.trim() ?? ''
+  const combinedAnswer = legacyChoices.length
+    ? `已选选项：\n${legacyChoices.map((choice) => `- ${choice}`).join('\n')}${legacySupplement ? `\n\n补充回答：\n${legacySupplement}` : ''}`
+    : legacySupplement
   const next = async () => {
     setBusy(true)
     setError('')
@@ -29,12 +58,26 @@ export function Intake({
         await api<RunState>(`/api/runs/${run.id}/grill`, {
           round: grill?.round ?? 0,
           ...(grill?.status === 'question'
-            ? { answer: combinedAnswer }
+            ? batchEnabled
+              ? pendingLocked && !dirty
+                ? {}
+                : {
+                  answers: questions.map((question, index) => {
+                    const key = questionKey(index)
+                    return {
+                      ...(question.id ? { questionId: question.id } : { question: question.title }),
+                      choices: selections[key] ?? [],
+                      answer: supplements[key]?.trim() ?? '',
+                    }
+                  }),
+                }
+              : { answer: combinedAnswer }
             : {}),
         }),
       )
-      setAnswer('')
-      setChoices([])
+      setSupplements({})
+      setSelections({})
+      setDirty(false)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '需求整理未完成。')
     } finally {
@@ -60,53 +103,77 @@ export function Intake({
         >
           <span className="eyebrow">
             <MessageSquare size={15} />{' '}
-            {grill?.status === 'question' ? '先确认一件重要的事' : '把需求说清楚'}
+            {grill?.status === 'question' ? '先确认这些重要的事' : '把需求说清楚'}
           </span>
-          <h2>{grill?.question?.title ?? '先对齐要求，再开始执行。'}</h2>
-          <p>{grill?.question?.reason ?? ''}</p>
-          {grill?.question && (
-            <>
-              <div className="question-options" role="group" aria-label="本轮选项">
-                {grill.question.options.map((option, index) => (
-                  <label className="question-option" key={option}>
-                    <input
-                      type="checkbox"
-                      name="grill-choice"
+          {questions.length ? (
+            <div className={`question-grid ${questions.length === 1 ? 'single' : ''}`}>
+              {questions.map((question, questionIndex) => {
+                const key = questionKey(questionIndex)
+                const choices = selections[key] ?? []
+                const answerId = batchEnabled ? `grill-answer-${question.id ?? questionIndex}` : 'grill-answer'
+                return (
+                  <article className="question-card" key={key}>
+                    <h2>{question.title}</h2>
+                    {question.reason && <p>{question.reason}</p>}
+                    <div className="question-options" role="group" aria-label={`${question.title}的选项`}>
+                      {question.options.map((option) => (
+                        <label className="question-option" key={option}>
+                          <input
+                            type="checkbox"
+                            name={`grill-choice-${key}`}
+                            disabled={busy}
+                            checked={choices.includes(option)}
+                            onChange={() => {
+                              setDirty(true)
+                              setSelections((previous) => ({
+                                ...previous,
+                                [key]: choices.includes(option)
+                                  ? choices.filter((value) => value !== option)
+                                  : [...choices, option],
+                              }))
+                            }}
+                          />
+                          <span>{option}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <label htmlFor={answerId}>补充回答</label>
+                    <textarea
+                      id={answerId}
+                      value={supplements[key] ?? ''}
                       disabled={busy}
-                      checked={choices.includes(option)}
-                      onChange={() => {
-                        setChoices((previous) =>
-                          previous.includes(option)
-                            ? previous.filter((value) => value !== option)
-                            : [...previous, option],
-                        )
+                      onChange={(event) => {
+                        setDirty(true)
+                        setSupplements((previous) => ({ ...previous, [key]: event.target.value }))
                       }}
+                      maxLength={4000}
+                      placeholder="写下你的具体要求…"
                     />
-                    <span>
-                      {option}
-                      <small>选项 {index + 1}</small>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              <label htmlFor="grill-answer">补充回答</label>
-              <textarea
-                id="grill-answer"
-                value={answer}
-                disabled={busy}
-                onChange={(event) => setAnswer(event.target.value)}
-                maxLength={4000}
-                placeholder="写下你的具体要求…"
-              />
-            </>
+                  </article>
+                )
+              })}
+            </div>
+          ) : (
+            <h2>先对齐要求，再开始执行。</h2>
           )}
           <div className="form-actions">
             <button
               className="button primary"
-              disabled={busy || (!!grill?.question && !answer.trim() && !choices.length)}
+              disabled={
+                busy ||
+                (!batchEnabled && !!questions.length && !legacySupplement && !legacyChoices.length)
+              }
             >
               {busy ? <Spinner /> : <ArrowRight size={16} />}
-              {busy ? '正在整理…' : grill?.question ? '确认回答，继续' : '开始澄清'}
+              {busy
+                ? '正在整理…'
+                : questions.length
+                  ? batchEnabled
+                    ? (grill?.round ?? 0) >= 6
+                      ? '查看需求'
+                      : '继续'
+                    : '确认回答，继续'
+                  : '开始澄清'}
             </button>
           </div>
         </form>
