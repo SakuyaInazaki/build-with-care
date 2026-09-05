@@ -6,3 +6,4 @@ dist/
 store/
 /db.sql
 /db.sqlite
+.env

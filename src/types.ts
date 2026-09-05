@@ -1,3 +1,5 @@
+import type { RunnerStatus } from './runner-types.js'
+
 export type VerdictKind = 'red' | 'blue' | 'gray'
 export type CardState = 'pending' | 'allowed' | 'overridden' | 'cancelled' | 'interrupted' | 'verified' | 'failed'
 export type DecisionStatus = 'pending' | 'allowed' | 'overridden' | 'cancelled' | 'interrupted'
@@ -6,8 +8,20 @@ export type VerificationStatus = 'unverified' | 'passed' | 'failed'
 export type ActionKind = 'write' | 'command' | 'read' | 'validate'
 export type CorrectionMode = 'forward-only' | 'rewind-and-fork'
 export type FailureKind = 'runtime-error' | 'constraint-conflict' | 'recording-drift'
+export type PostHocKind = 'allow' | 'alternative' | 'rewrite'
 
-export interface ConfirmedSpec { id: string; request: string; constraints: string[]; confirmed: boolean }
+export interface StructuredConstraint {
+  id: string
+  domain: string
+  kind: 'require' | 'forbid' | 'prefer'
+  values: string[]
+  text: string
+  source: 'spec' | 'adjudication' | 'draft'
+  createdAt: string
+  affectsFromTurn?: number
+}
+
+export interface ConfirmedSpec { id: string; request: string; constraints: string[]; confirmed: boolean; structuredConstraints?: StructuredConstraint[] }
 
 export interface ActionInput {
   id?: string
@@ -18,6 +32,49 @@ export interface ActionInput {
   specified?: boolean
   validationPassed?: boolean
   agentId?: string
+}
+
+export interface StructuredDecision {
+  domain: string
+  choice: string
+  rationale?: string
+  specifiedByHuman?: boolean
+  extracted?: boolean
+}
+
+export interface WorkUnitInput {
+  id?: string
+  agentId?: string
+  goal: string
+  decisions: StructuredDecision[]
+  toolCalls: ActionInput[]
+  summary?: string
+}
+
+export type DecisionMatchOutcome = 'forbidden' | 'required-mismatch' | 'required-match' | 'preference-mismatch' | 'human-specified' | 'unconstrained'
+export interface DecisionMatch {
+  decision: StructuredDecision
+  constraintId?: string
+  outcome: DecisionMatchOutcome
+  explanation: string
+}
+
+export interface UnitToolCall {
+  action: ActionInput
+  status: 'not-started' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'blocked'
+  executionId?: string
+  result?: { ok: boolean; output?: unknown; error?: string }
+  evidence?: VerificationEvidence
+  safetyNet?: { outcome: DecisionMatchOutcome; explanation: string; source: 'policy-safety-net' }
+  attempts: number
+}
+
+export interface UnitCard {
+  goal: string
+  decisions: StructuredDecision[]
+  matches: DecisionMatch[]
+  toolCalls: UnitToolCall[]
+  summary?: string
 }
 
 export interface ActionIdentity {
@@ -39,6 +96,34 @@ export interface VerificationEvidence {
   passed: boolean
 }
 
+/** What the human had said when this step happened. */
+export interface HumanContext {
+  request: string
+  constraints: string[]
+  lastAdjudication?: string
+}
+
+/** The recorder's reconciliation of "what the human said" vs "what the agent did". */
+export interface CardAssessment {
+  selfDirected: boolean
+  drift: boolean
+  confidence: number
+  note: string
+}
+
+/** Who judged the colour and who kept the record. */
+export interface CardProvenance {
+  judge: string
+  recorder: string
+}
+
+/** A human decision taken after the card had already executed. */
+export interface PostHocDecision {
+  kind: PostHocKind
+  text?: string
+  at: string
+}
+
 export interface DecisionCard extends ActionIdentity {
   id: string
   createdAt: string
@@ -54,20 +139,29 @@ export interface DecisionCard extends ActionIdentity {
   executionId?: string
   runtimeAttempts: number
   externalSideEffect: boolean
+  approvalDeadline?: string
+  blockedHelp?: boolean
+  humanContext: HumanContext
+  assessment: CardAssessment
+  provenance: CardProvenance
+  postHocDecision?: PostHocDecision
+  unit?: UnitCard
 }
 
 export type TimelineEventType =
   | 'session-start' | 'session-end' | 'agent-registered' | 'turn-start' | 'step-start'
   | 'human-command' | 'agent-action' | 'card-created' | 'verdict'
-  | 'human-adjudication' | 'injection' | 'tool-result' | 'verification' | 'failure'
-  | 'branch-created' | 'fork' | 'cancel' | 'turn-end' | 'adapter-event'
+   | 'human-adjudication' | 'injection' | 'tool-call' | 'tool-result' | 'verification' | 'failure'
+  | 'branch-created' | 'fork' | 'cancel' | 'turn-end' | 'adapter-event' | 'runner'
+
+export type TimelineEventSource = 'stream' | 'judge' | 'recorder' | 'executor' | 'human' | 'workspace' | 'runner' | 'agent'
 
 export interface TimelineEvent {
   id: string
   sequence: number
   at: string
   type: TimelineEventType
-  source: 'stream' | 'judge' | 'recorder' | 'executor' | 'human' | 'workspace'
+  source: TimelineEventSource
   sessionId: string
   branchId: string
   agentId?: string
@@ -79,6 +173,14 @@ export interface TimelineEvent {
   version?: string
   externalType?: string
   metadata?: Record<string, unknown>
+}
+
+export interface Branch {
+  id: string
+  parentId?: string
+  forkTurn?: number
+  active: boolean
+  createdAt?: string
 }
 
 export type HumanDecision =
@@ -118,13 +220,47 @@ export interface ActionResult {
   toolResult?: ToolResult
 }
 
-export interface RecorderInput extends ActionIdentity { humanInstruction?: string; action: ActionInput }
+export interface RecorderInput extends ActionIdentity {
+  humanInstruction?: string
+  constraints?: string[]
+  lastAdjudication?: string
+  action: ActionInput
+}
 export interface RecordingAssessment { selfDirected: boolean; deviatesFromInstruction: boolean; note: string; confidence: number; drift: boolean }
 
 export interface VerificationRecord { cardId: string; evidence: VerificationEvidence }
 
+export interface CorrectionRecord {
+  cardId: string
+  turn: number
+  agentId: string
+  kind: 'allow' | 'alternative' | 'rewrite' | 'cancel'
+  before: string
+  after: string
+  mode: CorrectionMode
+  at: string
+  branchId: string
+  postHoc: boolean
+}
+
+export interface AgentReport {
+  agentId: string
+  actions: number
+  selfDirected: number
+  red: number
+  blue: number
+  gray: number
+  verified: number
+  failed: number
+}
+
+export interface ColorCounts { red: number; blue: number; gray: number; green: number; failed: number }
+
 export interface SessionReport {
   sessionId: string
+  startedAt: string
+  endedAt?: string
+  durationMs: number
   decisions: number
   allowed: number
   overrides: number
@@ -139,7 +275,39 @@ export interface SessionReport {
   irreversibleSideEffects: number
   unverified: number
   recordingFailures: number
-  corrections: Array<{ cardId: string; before: string; after: string; mode: CorrectionMode }>
+  humanDecisions: number
+  agentDecisions: number
+  directionCorrections: number
+  byColor: ColorCounts
+  perAgent: AgentReport[]
+  corrections: CorrectionRecord[]
   summary: string
   events: readonly TimelineEvent[]
+}
+
+export interface SessionState {
+  sessionId: string
+  mode: CorrectionMode
+  title: string
+  createdAt: string
+  endedAt?: string
+  spec?: ConfirmedSpec
+  cards: DecisionCard[]
+  timeline: readonly TimelineEvent[]
+  branches: readonly Branch[]
+  agents: string[]
+  runner: RunnerStatus
+  report: SessionReport
+}
+
+export interface SessionSummary {
+  sessionId: string
+  mode: CorrectionMode
+  title: string
+  createdAt: string
+  endedAt?: string
+  request?: string
+  counts: { cards: number; pending: number; red: number; blue: number; gray: number; green: number; failed: number }
+  agents: string[]
+  runner: RunnerStatus['state']
 }

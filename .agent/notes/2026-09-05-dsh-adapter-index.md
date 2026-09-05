@@ -34,7 +34,7 @@
 
 ## 未实现与风险
 
-- 没有把 `@deepseek-ai/dsh` 加入依赖。npm registry 当前可见 `0.1.2-rc.1`，目标 `0.1.3-alpha.1` 查询为 404；因此 `package.json` 的目标版本元数据仍是声明，不是安装证明。
+- 主仓库没有把 `@deepseek-ai/dsh` 加入必装依赖；真实 `0.1.3-alpha.1` checkout 已由 `integrations/dsh-plugin` 通过显式路径链接并复核，主仓库 `package.json` 的版本字段仍只是目标元数据。
 - `requireRealDshRuntime()` 只做存在性/版本诊断，不会返回假的 adapter。真实 adapter 仍需基于实际锁定 commit/package API 实现，并在真实 dsh 环境跑 POC。
 - `MockDshAdapter` 没有工具执行、模型请求或浏览器 UI；它只验证 adapter 协议和顺序。
 - `mapDshEvent()` 对未知事件采用保留式降级，不能替代未来 dsh 版本的语义适配审核。
@@ -43,7 +43,7 @@
 
 ## 本次验证
 
-- `npm view @deepseek-ai/dsh@0.1.3-alpha.1 version --json`：404，未添加虚假依赖。
+- 主仓库未添加虚假 dsh 依赖；插件使用显式 `DSH_CLONE` 链接真实 checkout。
 - `npm install`：成功；npm 报告已有 5 个审计漏洞，未执行破坏性 `npm audit fix`。
 - `npm run typecheck`：通过。
 - `npm test`：通过，5 个测试文件、28/28；新增 dsh adapter smoke 为 5 项。

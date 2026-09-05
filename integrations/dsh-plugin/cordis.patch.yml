@@ -1,0 +1,5 @@
+# DeepSeek Harness 0.1.3 profile bundle layer. The base profile supplies the
+# injected agent, system-prompt, and tools services.
+- insert:
+    - id: decision-stream
+      name: '@decision-stream/dsh-plugin'

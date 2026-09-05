@@ -1,14 +1,47 @@
 import { describe, expect, it } from 'vitest'
 import { DecisionStream } from './stream.js'
-import type { ActionInput } from './types.js'
+import type { ActionInput, Verdict } from './types.js'
 import { mkdtempSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const spec = { id: 's1', request: '做数据库功能', constraints: ['存储必须使用 Postgres，不允许 SQLite'], confirmed: true }
 const action = (overrides: Partial<ActionInput> = {}): ActionInput => ({ tool: 'write_file', kind: 'write', description: '选择 SQLite 存储', args: { path: 'db.sqlite' }, ...overrides })
+const permissiveJudge = { name: 'llm:fake', judge: async (): Promise<Verdict> => ({ kind: 'blue', explanation: '模型认为可以', alternatives: [] }) }
 
 describe('Decision Stream governance', () => {
+  it('keeps deterministic red as a hard floor over an LLM downgrade', async () => {
+    const stream = new DecisionStream({ judge: permissiveJudge, approvalTimeoutMs: 1000 }); stream.confirmSpec(spec)
+    const pending = stream.execute(action())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(stream.cards[0]?.verdict.kind).toBe('red')
+    stream.decide(stream.cards[0]!.id, { kind: 'cancel' })
+    await pending
+  })
+
+  it('executes multiple tools under one work-unit card', async () => {
+    const stream = new DecisionStream(); stream.confirmSpec(spec)
+    const result = await stream.executeUnit({ id: 'unit-1', goal: '读取并检查配置', decisions: [], toolCalls: [
+      { tool: 'read_file', kind: 'read', description: '读取说明', args: { path: 'README.md' } },
+      { tool: 'validate', kind: 'validate', description: '检查说明', args: { target: 'README.md' } },
+    ] })
+    expect(stream.cards).toHaveLength(1); expect(result.card.unit?.toolCalls).toHaveLength(2)
+    expect(result.card.unit?.toolCalls.every((call) => call.status === 'succeeded')).toBe(true)
+    expect(stream.events.filter((event) => event.type === 'tool-call' && event.cardId === 'unit-1')).toHaveLength(2)
+  })
+
+  it('blocks an undeclared constrained tool call through the policy safety net', async () => {
+    const stream = new DecisionStream(); stream.confirmSpec(spec)
+    const pending = stream.executeUnit({ id: 'unit-safety', goal: '执行存储', decisions: [], toolCalls: [action()] })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(stream.cards[0]!.unit?.toolCalls[0]?.status).toBe('blocked')
+    expect(stream.cards[0]!.unit?.toolCalls[0]?.safetyNet?.source).toBe('policy-safety-net')
+    expect(stream.events.some((event) => event.metadata?.source === 'policy-safety-net')).toBe(true)
+    stream.decide('unit-safety', { kind: 'cancel' })
+    const result = await pending
+    expect(result.allowed).toBe(false)
+  })
+
   it('blocks red cards until allow', async () => {
     const stream = new DecisionStream(); stream.confirmSpec(spec)
     let finished = false; const pending = stream.execute(action()).then((result) => { finished = true; return result })
@@ -48,7 +81,7 @@ describe('Decision Stream governance', () => {
 
   it('allows specified and pure execution as gray, with immutable timeline snapshots', async () => {
     const stream = new DecisionStream(); stream.confirmSpec(spec)
-    const result = await stream.execute(action({ kind: 'read', description: '读取配置', specified: true }))
+    const result = await stream.execute(action({ kind: 'read', description: '读取配置', args: { path: 'README.md' }, specified: true }))
     expect(result.card.verdict.kind).toBe('gray'); const before = stream.events; stream.verify(result.card.id, true)
     expect(before).not.toBe(stream.events); expect(before.at(-1)!.message).not.toContain('green')
   })
