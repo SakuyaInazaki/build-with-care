@@ -1,6 +1,6 @@
 # DeepSeek Harness (dsh) 作为决策流底座的可行性调研
 
-> 2026-09-04 · 芝士。方法：浅克隆 deepseek-ai/deepseek-harness（v0.1.3-alpha.1，2026-08-13 开源，Cordis 插件框架，TS）全源码，由调研分身逐条核对代码与文档，证据均为文件路径 + 原文。
+> 原调研版本为 0.1.3-alpha.1，当前已在 commit `d347e70390` 真实复核。方法：浅克隆 deepseek-ai/deepseek-harness（0.1.3-alpha.1，2026-08-13 开源，Cordis 插件框架，TS）全源码，由调研分身逐条核对代码与文档，证据均为文件路径 + 原文。
 > 背景：D5 原定 Claude Agent SDK 自建壳（见 <docs/requirements-alignment-Y.md>），Yonack1 提出改用 dsh 开刀，本文评估。
 
 ## 结论
@@ -30,7 +30,7 @@
 2. 内建 `ctx.approval` 的请求**不带工具入参**且要求 open turn → 别用它，自己在 `pre-execute` 里 POST 全参给审批面板。
 3. pre-execute 挂起会**卡住同批并行工具调用**（有序阶段）→ demo 场景单 agent 无碍。
 4. 自定义事件不能自动桥到浏览器（Host→Client 白名单）→ 复用已桥接的 `user-questions/request`，或 `ctx.webServer.register()` 自建路由。
-5. **alpha 预览版**，README 明言会有破坏性变更 → 锁死版本号，赛期内不升级。
+5. **alpha 预览版**，README 明言会有破坏性变更 → 锁死 `0.1.3-alpha.1` / `d347e70390`，赛期内不升级。
 6. 作为外部独立插件开发（不进它 monorepo），绕开它 60+ 个 verify 门禁。
 
 ## 对 D5 的影响（对比表）

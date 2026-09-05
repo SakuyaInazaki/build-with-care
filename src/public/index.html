@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>在场｜Agent 过程对账台</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<a class="skip" href="#ledger">跳到过程对账</a>
+
+<header class="topbar" id="topbar" role="banner">
+  <div class="brand">
+    <span class="mark" aria-hidden="true">在场</span>
+    <span class="wordmark">Agent 过程对账台</span>
+  </div>
+
+  <div class="session-switch">
+    <label class="sr-only" for="sessionSelect">选择会话</label>
+    <select id="sessionSelect" class="input" aria-label="选择会话"><option value="">加载会话…</option></select>
+    <span id="modeBadge" class="badge" hidden></span>
+    <time id="sessionTime" class="meta"></time>
+    <button id="newSessionBtn" class="btn btn-ghost btn-sm" type="button">新会话</button>
+  </div>
+
+  <div class="top-status">
+    <span id="live" class="live" data-state="connecting" role="status" aria-live="polite"><i aria-hidden="true"></i><span id="liveText">连接中</span></span>
+    <span id="runnerChip" class="chip" data-state="idle" role="status">空闲</span>
+  </div>
+
+  <div class="top-actions">
+    <div class="menu" id="demoMenu">
+      <button id="demoBtn" class="btn btn-primary" type="button" aria-haspopup="menu" aria-expanded="false">运行完整演示 <span class="caret" aria-hidden="true">▼</span></button>
+      <div class="menu-list" id="demoMenuList" role="menu" hidden>
+        <button class="menu-item" role="menuitem" type="button" data-scenario="full"><b>完整剧本</b><span>蓝卡 → 红卡阻断 → 纠偏 → 执行 → 证据 → 运行失败求助</span></button>
+        <button class="menu-item" role="menuitem" type="button" data-scenario="multi-agent"><b>多 agent 并行</b><span>3 个 agent 交错动作，验证全局时间线合并</span></button>
+        <button class="menu-item" role="menuitem" type="button" data-scenario="red-only"><b>只出一张红卡</b><span>最短路径：立刻看到阻断与裁决</span></button>
+      </div>
+    </div>
+    <button id="runBtn" class="btn btn-secondary" type="button" disabled title="尚未配置真实模型">真实模型运行</button>
+    <button id="endBtn" class="btn btn-secondary" type="button">结束会话并出报告</button>
+    <button id="printBtn" class="btn btn-ghost" type="button">打印报告</button>
+    <button id="cancelBtn" class="btn btn-ghost danger" type="button">紧急叫停</button>
+  </div>
+</header>
+
+<div id="stageStrip" class="stage-strip" hidden>
+  <span id="stageKind" class="stage-kind"></span>
+  <ol id="stepper" class="stepper" aria-label="运行阶段"></ol>
+  <span id="stageMsg" class="stage-msg"></span>
+</div>
+
+<main class="workbench" id="workbench">
+  <section id="onboarding" class="onboarding" hidden aria-labelledby="onboardingTitle">
+    <h1 id="onboardingTitle">让人留在场上：每一步都对账，只有冲突才打断</h1>
+    <p>Agent 的每个动作都变成一张卡。🔴 与你定过的约束冲突 → 执行前阻断；🔵 你没指定、它自己拍板 → 进侧栏，随时翻案；⚪ 纯执行只进日志；🟢 只有真实验证证据才变绿。</p>
+    <button id="onboardingCreate" class="btn btn-primary btn-lg" type="button">开始一个新会话</button>
+    <ol class="steps">
+      <li><b>1 · 写一句话需求</b><span>让 agent 扩写成几条约束，你确认后才开工。这就是判红/蓝的 baseline。</span></li>
+      <li><b>2 · 看对账，只裁红卡</b><span>左栏“人说了什么”，右栏“Agent 实际做了什么”。红卡一键选备选或改写。</span></li>
+      <li><b>3 · 回放，出报告</b><span>时间线可回放；一页报告说清楚哪些判断是你做的。</span></li>
+    </ol>
+  </section>
+
+  <div id="grid" class="grid" hidden>
+    <aside class="col-setup" id="setupCol" aria-label="会话设置">
+      <section class="panel" id="setupPanel" aria-labelledby="setupTitle">
+        <div class="panel-head">
+          <div><h2 id="setupTitle">01 · 需求与 spec</h2><p class="sub">确认过的 spec 是判红/判蓝的 baseline</p></div>
+        </div>
+        <form class="setup-form" id="setupForm" novalidate>
+          <div class="field span2">
+            <label for="requestInput">一句话需求</label>
+            <textarea id="requestInput" class="input" rows="3" placeholder="例如：做一个可被学生使用的报名信息存储功能">做一个可被学生使用的数据库功能，能安全保存报名信息</textarea>
+          </div>
+          <div class="field span2">
+            <div class="constraint-tools">
+              <label for="constraintList">约束（可编辑、可删除）</label>
+              <span id="draftSource" class="draft-source" hidden></span>
+            </div>
+            <ul id="constraintList" class="constraint-list" aria-label="约束列表"></ul>
+            <div class="constraint-tools">
+              <button id="draftBtn" class="btn btn-secondary btn-sm" type="button">让 agent 扩写约束</button>
+              <button id="addConstraintBtn" class="btn btn-ghost btn-sm" type="button">+ 添加一条</button>
+            </div>
+          </div>
+          <div class="field">
+            <label id="modeLabel">纠偏模式</label>
+            <div class="mode-row" role="radiogroup" aria-labelledby="modeLabel">
+              <button class="mode" type="button" role="radio" aria-checked="true" data-mode="forward-only"><b>forward-only</b><span>不回写历史，纠偏只约束后续步骤</span></button>
+              <button class="mode" type="button" role="radio" aria-checked="false" data-mode="rewind-and-fork"><b>rewind-and-fork</b><span>从已完成 turn 边界 fork，原分支暂存</span></button>
+            </div>
+            <p id="modeNote" class="mode-note">模式在会话创建时锁定，之后不能静默切换。</p>
+          </div>
+          <div class="field" style="align-self:end">
+            <button id="confirmBtn" class="btn btn-primary btn-lg" type="submit">确认 spec 并开工</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel spec-confirmed" id="specPanel" hidden aria-labelledby="specTitle">
+        <div class="panel-head">
+          <div><h2 id="specTitle">已确认的 spec</h2><p class="sub">红卡 = 与这些约束冲突</p></div>
+          <div class="tools"><button id="collapseSetupBtn" class="btn btn-ghost btn-sm" type="button" title="收起">‹ 收起</button></div>
+        </div>
+        <p class="req" id="specRequest"></p>
+        <ul id="specList" class="spec-list"></ul>
+        <div class="spec-foot"><span id="specCount" class="meta"></span></div>
+      </section>
+
+      <button id="railBtn" class="panel rail-collapsed" type="button" hidden title="展开 spec">
+        <span>› 展开</span><span id="railText" class="meta">spec</span>
+      </button>
+    </aside>
+
+    <section class="col-ledger" id="ledger" aria-labelledby="ledgerTitle">
+      <div class="ledger-head">
+        <div><h2 id="ledgerTitle">过程对账</h2><p class="sub">每一步：人说了什么 / Agent 实际做了什么</p></div>
+        <div class="legend" aria-label="卡片颜色含义">
+          <span><i style="background:var(--red-500)"></i>红 · 冲突阻断</span>
+          <span><i style="background:var(--blue-500)"></i>蓝 · 自主拍板</span>
+          <span><i style="background:var(--g-400)"></i>灰 · 纯执行</span>
+          <span><i style="background:var(--green-500)"></i>绿 · 有证据</span>
+          <span><i style="background:var(--amber-500)"></i>失败 · 求助</span>
+        </div>
+      </div>
+      <div id="ledgerList" class="ledger-list"></div>
+    </section>
+
+    <aside class="col-side" aria-label="裁决与侧栏">
+      <section id="dock" class="dock" hidden aria-live="assertive" aria-labelledby="dockTitle"></section>
+
+      <section class="panel" id="bluePanel" aria-labelledby="blueTitle">
+        <div class="panel-head">
+          <div><h2 id="blueTitle">🔵 蓝卡侧栏</h2><p class="sub">agent 自己拍的板，不阻断，随时翻案</p></div>
+          <span id="blueCount" class="pill blue">0</span>
+        </div>
+        <div id="blueList" class="mini-list"></div>
+      </section>
+
+      <section class="panel" id="branchPanel" aria-labelledby="branchTitle">
+        <div class="panel-head">
+          <div><h2 id="branchTitle">分支</h2><p class="sub" id="branchSub">rewind-and-fork 时从 turn 边界分叉</p></div>
+        </div>
+        <div id="branchBody"></div>
+      </section>
+    </aside>
+  </div>
+
+  <section class="panel timeline-panel" id="timelinePanel" hidden aria-labelledby="timelineTitle">
+    <div class="panel-head">
+      <div><h2 id="timelineTitle">全局时间线</h2><p class="sub">多 agent 合并、append-only；可回放到任一时刻</p></div>
+      <span id="eventCount" class="meta"></span>
+    </div>
+    <div id="timelineBody"></div>
+  </section>
+
+  <section class="panel report-panel" id="reportPanel" hidden aria-labelledby="reportTitle">
+    <div class="panel-head">
+      <div><h2 id="reportTitle">一页报告</h2><p class="sub">归因人的判断，不归因代码行</p></div>
+      <div class="tools"><button id="reportPrintBtn" class="btn btn-ghost btn-sm" type="button">打印</button></div>
+    </div>
+    <div id="reportBody"></div>
+  </section>
+</main>
+
+<dialog id="adjudicator" class="dialog" aria-labelledby="adjudicatorTitle"></dialog>
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
