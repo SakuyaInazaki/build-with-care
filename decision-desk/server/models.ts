@@ -8,15 +8,61 @@ import {
   type ToolSchema,
 } from '@deepseek-ai/dsh-llm'
 import type { ModelConfig } from '../shared/types.js'
+import { request as httpRequest } from 'node:http'
+import { request as httpsRequest } from 'node:https'
+import { DEEPSEEK_MODELS, isDeepSeekBaseUrl } from '../shared/model-presets.js'
+
+// The execution path has no wall-clock or socket timeout; user cancellation remains active.
+function postWithoutDeadline(
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+  signal?: AbortSignal,
+) {
+  return new Promise<string>((resolve, reject) => {
+    const request = (url.startsWith('https:') ? httpsRequest : httpRequest)(
+      url,
+      {
+        method: 'POST',
+        headers,
+        signal,
+      },
+      (response) => {
+        if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+          response.resume()
+          reject(new Error(`模型服务返回 HTTP ${response.statusCode}，请检查地址、模型名称和密钥`))
+          return
+        }
+        const chunks: Buffer[] = []
+        let bytes = 0
+        response.on('data', (chunk: Buffer) => {
+          bytes += chunk.length
+          if (bytes > 3_000_000) {
+            response.destroy(new Error('模型响应过大'))
+            return
+          }
+          chunks.push(chunk)
+        })
+        response.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+        response.on('error', reject)
+      },
+    )
+    request.setTimeout(0)
+    request.on('error', reject)
+    request.end(body)
+  })
+}
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string | null
+  reasoning_content?: string
   tool_call_id?: string
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]
 }
 export interface Completion {
   content: string
+  reasoningContent?: string
   calls: { id: string; name: string; arguments: string }[]
   finishReason: string
   usage?: { prompt_tokens?: number; completion_tokens?: number }
@@ -47,32 +93,61 @@ export async function complete(
   messages: ChatMessage[],
   tools?: ToolSchema[],
   signal?: AbortSignal,
-  timeoutMs = 120000,
+  timeoutMs: number | null = 120000,
 ): Promise<Completion> {
-  const response = await fetch(completionUrl(config.baseUrl), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...attributionHeaders(),
-      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
-    },
-    signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(timeoutMs)]),
-    body: JSON.stringify({
-      model: config.model,
-      messages,
-      stream: false,
-      ...(tools?.length
-        ? {
-            tools: tools.map((t) => ({ type: 'function', function: t })),
-            tool_choice: 'auto',
-            parallel_tool_calls: false,
-          }
-        : {}),
-    }),
+  const timeout = timeoutMs === null ? undefined : AbortSignal.timeout(timeoutMs)
+  const headers = {
+    'Content-Type': 'application/json',
+    ...attributionHeaders(),
+    ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+  }
+  const effort = config.reasoningEffort
+  if (
+    effort &&
+    !(
+      isDeepSeekBaseUrl(config.baseUrl) &&
+      DEEPSEEK_MODELS.some((model) => model.value === config.model)
+    )
+  )
+    throw new Error('当前模型未配置推理强度支持。')
+  const payload = JSON.stringify({
+    model: config.model,
+    messages,
+    stream: false,
+    ...(effort
+      ? effort === 'none'
+        ? { thinking: { type: 'disabled' } }
+        : { thinking: { type: 'enabled' }, reasoning_effort: effort }
+      : {}),
+    ...(tools?.length
+      ? {
+          tools: tools.map((t) => ({ type: 'function', function: t })),
+          tool_choice: 'auto',
+          parallel_tool_calls: false,
+        }
+      : {}),
   })
-  if (!response.ok)
-    throw new Error(`模型服务返回 HTTP ${response.status}，请检查地址、模型名称和密钥`)
-  const text = await response.text()
+  let text: string
+  try {
+    if (!timeout)
+      text = await postWithoutDeadline(completionUrl(config.baseUrl), headers, payload, signal)
+    else {
+      const response = await fetch(completionUrl(config.baseUrl), {
+        method: 'POST',
+        headers,
+        body: payload,
+        signal: AbortSignal.any([...(signal ? [signal] : []), timeout]),
+      })
+      if (!response.ok)
+        throw new Error(`模型服务返回 HTTP ${response.status}，请检查地址、模型名称和密钥`)
+      text = await response.text()
+    }
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason
+    if (timeout?.aborted)
+      throw new Error(`模型响应超过 ${Math.ceil(timeoutMs! / 1000)} 秒，本次请求已停止。`)
+    throw error
+  }
   if (text.length > 3_000_000) throw new Error('模型响应过大')
   let body: any
   try {
@@ -86,6 +161,9 @@ export async function complete(
     throw new Error('模型返回中没有 choices[0].message；请使用 Chat Completions 兼容接口')
   return {
     content: typeof message.content === 'string' ? message.content : '',
+    ...(typeof message.reasoning_content === 'string'
+      ? { reasoningContent: message.reasoning_content }
+      : {}),
     calls: (message.tool_calls ?? []).map((c: any) => {
       if (
         !c.id ||
@@ -112,9 +190,13 @@ export function wireMessages(options: GenerateOptions): ChatMessage[] {
     const calls = m.content.filter((b) => b.type === 'tool-call')
     const results = m.content.filter((b) => b.type === 'tool-result')
     if (m.role === 'assistant') {
+      const reasoning = m.content.filter((block) => block.type === 'reasoning')
       messages.push({
         role: 'assistant',
         content: text || null,
+        ...(reasoning.length
+          ? { reasoning_content: reasoning.map((block) => block.text).join('') }
+          : {}),
         ...(calls.length
           ? {
               tool_calls: calls.map((c) => ({
@@ -140,12 +222,15 @@ export function wireMessages(options: GenerateOptions): ChatMessage[] {
 
 export async function* responseChunks(response: Completion): AsyncIterable<StreamChunk> {
   const blocks: ContentBlock[] = []
+  if (response.reasoningContent !== undefined)
+    blocks.push({ type: 'reasoning', text: response.reasoningContent })
   if (response.content) blocks.push({ type: 'text', text: response.content })
   for (const c of response.calls)
     blocks.push({ type: 'tool-call', id: ToolCallId(c.id), name: c.name, arguments: c.arguments })
   for (const [index, block] of blocks.entries()) {
     yield { type: 'block-start', index, blockType: block.type }
     if (block.type === 'text') yield { type: 'text-delta', index, text: block.text }
+    if (block.type === 'reasoning') yield { type: 'reasoning-delta', index, text: block.text }
     if (block.type === 'tool-call')
       yield {
         type: 'tool-call-delta',
@@ -187,7 +272,7 @@ export class CompatibleAdapter extends LlmAdapter {
   async *stream(options: GenerateOptions) {
     this.onRequest?.(options)
     yield* responseChunks(
-      await complete(this.config, wireMessages(options), options.tools, options.signal),
+      await complete(this.config, wireMessages(options), options.tools, options.signal, null),
     )
   }
 }

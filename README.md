@@ -1,4 +1,21 @@
-# 在场｜Agent 过程对账台
+# 看着办 · Agent 工作台
+
+
+## 当前前端
+
+新的产品入口为 `frontend/`，从空白文件重建，使用 Apple Design 与 Refactoring UI；不复用旧前端页面、组件或样式。语义以 [`docs/requirements-v1-frozen.md`](./docs/requirements-v1-frozen.md) 为准。
+
+```sh
+pnpm --dir decision-desk install --frozen-lockfile
+npm --prefix frontend ci
+npm run dev
+```
+
+打开 http://127.0.0.1:4317。生产预览使用 `npm run build` 和 `npm start`。新前端运行说明、验证结果及已知后端边界见 [`frontend/README.md`](./frontend/README.md)，本次变更记录在 [`.agent/notes/`](./.agent/notes/)。项目名称经用户确认采用“看着办”；历史名称保留在旧实现说明中。
+
+## 历史实现说明
+
+下文保留冻结前两套实现的历史说明，其中分支、异源要求、模拟演示和验收表述不覆盖冻结基线。根目录原启动命令改为 `dev:legacy`、`build:legacy`、`start:legacy`。
 
 ## Decision Desk 实现
 

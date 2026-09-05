@@ -9,6 +9,7 @@ import {
   readdirSync,
   writeFileSync,
   renameSync,
+  rmSync,
 } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -62,6 +63,30 @@ export class Store {
   recordRaw(id: string, event: unknown) {
     appendFileSync(path.join(this.directory(id), 'dsh-events.jsonl'), JSON.stringify(event) + '\n')
   }
+  delete(id: string) {
+    const directory = this.directory(id)
+    // Kept outside the run directory so deleting that run cannot erase its audit.
+    const audit = path.join(
+      path.dirname(this.root),
+      `${path.basename(this.root)}.deletion-audit.jsonl`,
+    )
+    const operationId = randomUUID()
+    const appendAudit = (phase: string) => {
+      const fd = openSync(audit, 'a')
+      try {
+        writeFileSync(
+          fd,
+          JSON.stringify({ operationId, runId: id, at: new Date().toISOString(), phase }) + '\n',
+        )
+        fsyncSync(fd)
+      } finally {
+        closeSync(fd)
+      }
+    }
+    appendAudit('requested')
+    rmSync(directory, { recursive: true, force: false })
+    appendAudit('completed')
+  }
   loadAll(): RunState[] {
     return readdirSync(this.root, { withFileTypes: true })
       .filter((d) => d.isDirectory())
@@ -94,8 +119,7 @@ export class Store {
           if (tail.length) this.save(state)
           if (['running', 'waiting', 'stopping'].includes(state.status)) {
             state.status = 'interrupted'
-            state.error =
-              '服务重启，中断的工具不会自动重新执行。可查看原记录，再通过追加要求明确继续。'
+            state.error = '服务已中断，可点击“继续任务”继续。'
             for (const gate of state.gates) if (gate.status === 'pending') gate.status = 'cancelled'
             for (const step of state.steps)
               if (['reviewing', 'waiting', 'executing'].includes(step.status))

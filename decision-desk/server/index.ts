@@ -11,19 +11,26 @@ const app = createApp(manager),
   production = process.argv.includes('--production')
 let closeVite: (() => Promise<void>) | undefined
 if (production) {
-  if (!existsSync('dist/index.html')) throw new Error('请先运行 pnpm build')
-  app.use(express.static(path.resolve('dist')))
-  app.get('/{*path}', (_req, res) => res.type('html').send(readFileSync('dist/index.html', 'utf8')))
+  const frontend = path.resolve(process.env.FRONTEND_DIST ?? 'dist')
+  if (!existsSync(path.join(frontend, 'index.html'))) throw new Error('请先构建前端')
+  app.use(express.static(frontend))
+  app.get('/{*path}', (_req, res) =>
+    res.type('html').send(readFileSync(path.join(frontend, 'index.html'), 'utf8')),
+  )
 } else {
   const { createServer: createViteServer } = await import('vite')
-  const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' })
+  const vite = await createViteServer({
+    root: process.env.FRONTEND_ROOT ? path.resolve(process.env.FRONTEND_ROOT) : undefined,
+    server: { middlewareMode: true },
+    appType: 'spa',
+  })
   app.use(vite.middlewares)
   closeVite = () => vite.close()
 }
 app.use(errorHandler)
 const server = createServer(app),
   port = Number(process.env.PORT ?? 4317)
-server.listen(port, '127.0.0.1', () => console.log(`在场 · 决策对账台 http://127.0.0.1:${port}`))
+server.listen(port, '127.0.0.1', () => console.log(`看着办 · 工作空间 http://127.0.0.1:${port}`))
 let closing = false
 async function shutdown() {
   if (closing) return

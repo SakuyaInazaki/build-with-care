@@ -123,12 +123,33 @@ export interface RunState {
   runtime: string
   workerLabel: string
   reviewerLabel: string
+  grill?: GrillState
+}
+export interface GrillQuestion {
+  title: string
+  reason: string
+  options: string[]
+}
+export interface GrillState {
+  status: 'idle' | 'question' | 'confirm' | 'confirmed'
+  round: number
+  question?: GrillQuestion
+  answers: { question: string; answer: string }[]
+  constraints: string[]
+  assumptions: string[]
+  unresolved: string[]
+}
+export interface GrillConfirmation {
+  confirmed: boolean
+  acceptedAssumptions: boolean
+  unresolved: { item: string; answer: string }[]
 }
 export interface ModelConfig {
   baseUrl: string
   model: string
   family: string
   apiKey: string
+  reasoningEffort?: 'none' | 'low' | 'high' | 'max'
 }
 export interface Settings {
   worker: ModelConfig
@@ -143,6 +164,7 @@ export interface PublicSettings {
   reviewTimeoutMs: number
   gateTimeoutMs: number
   configured: boolean
+  sharedDeepSeekKey?: boolean
 }
 export interface VerdictInput {
   requestId: string

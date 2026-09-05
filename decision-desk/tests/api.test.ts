@@ -59,6 +59,17 @@ it('uses the actual compatible worker and independent reviewer adapters with a l
         }
       } else {
         const stage = workerStage++
+        if (
+          stage > 0 &&
+          body.messages.some(
+            (message: any) =>
+              message.role === 'assistant' && typeof message.reasoning_content !== 'string',
+          )
+        ) {
+          res.statusCode = 400
+          res.end(JSON.stringify({ error: 'reasoning_content is required for assistant history' }))
+          return
+        }
         const args =
           stage === 0
             ? { path: 'index.html', content: demoHtml('local'), intent: '持久化保存' }
@@ -81,6 +92,7 @@ it('uses the actual compatible worker and independent reviewer adapters with a l
                 ],
               }
             : { content: '已修改并完成列出的静态检查。' }
+        message.reasoning_content = `Test planning state ${stage}`
       }
       res.setHeader('Content-Type', 'application/json')
       res.end(
@@ -143,6 +155,11 @@ it('uses the actual compatible worker and independent reviewer adapters with a l
   ).toBe(true)
   expect(JSON.stringify(workers[1].body.messages)).toContain('DECISION_DESK_INTERVENTION:')
   expect(workers[0].body.parallel_tool_calls).toBe(false)
+  expect(
+    workers[3].body.messages
+      .filter((message: any) => message.role === 'assistant')
+      .map((message: any) => message.reasoning_content),
+  ).toEqual(['Test planning state 0', 'Test planning state 1', 'Test planning state 2'])
   for (const file of ['state.json', 'events.jsonl', 'dsh-events.jsonl'])
     expect(readFileSync(path.join(manager.store.directory(state.id), file), 'utf8')).not.toContain(
       '-test-secret',
