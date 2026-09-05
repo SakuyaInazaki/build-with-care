@@ -1,0 +1,215 @@
+import express from 'express'
+import path from 'node:path'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { z } from 'zod'
+import type { RunState } from '../shared/types.js'
+import { Manager } from './manager.js'
+import { Workspace } from './workspace.js'
+import { complete } from './models.js'
+
+const modelSchema = z.object({
+  baseUrl: z.string().min(1).max(500),
+  model: z.string().trim().min(1).max(100),
+  family: z.string().trim().min(1).max(60),
+  apiKey: z.string().max(2000),
+})
+const verdictSchema = z.object({
+  requestId: z.string().uuid(),
+  revision: z.number().int().positive(),
+  decisionId: z.string().uuid(),
+  gateId: z.string().uuid().optional(),
+  action: z.enum(['correct', 'enforce', 'allow-once', 'acknowledge']),
+  text: z.string().trim().max(2000).optional(),
+  replaceConstraintId: z.string().uuid().optional(),
+})
+export function createApp(manager: Manager) {
+  const app = express(),
+    token = randomBytes(32).toString('hex')
+  app.disable('x-powered-by')
+  app.use(express.json({ limit: '1mb' }))
+  app.use('/api', (req, res, next) => {
+    const host = req.get('host') ?? ''
+    if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) {
+      res.status(403).json({ error: '只允许本地访问' })
+      return
+    }
+    const origin = req.get('origin')
+    if (origin && origin !== `http://${host}`) {
+      res.status(403).json({ error: '请求来源不匹配' })
+      return
+    }
+    res.setHeader('Cache-Control', 'no-store')
+    if (req.path === '/bootstrap' && req.method === 'GET') {
+      next()
+      return
+    }
+    const candidate =
+      req
+        .get('cookie')
+        ?.split(';')
+        .map((c) => c.trim())
+        .find((c) => c.startsWith('decision_session='))
+        ?.slice('decision_session='.length) ?? ''
+    if (
+      !/^[a-f0-9]{64}$/.test(candidate) ||
+      !timingSafeEqual(Buffer.from(candidate), Buffer.from(token))
+    ) {
+      res.status(401).json({ error: '会话已失效，请刷新页面' })
+      return
+    }
+    next()
+  })
+  app.get('/api/bootstrap', (_req, res) => {
+    res.cookie('decision_session', token, {
+      httpOnly: true,
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 86400000,
+    })
+    res.json({
+      settings: manager.publicSettings(),
+      runs: manager.list(),
+      runtime: 'dsh 0.1.2-rc.1',
+    })
+  })
+  app.get('/api/settings', (_req, res) => res.json(manager.publicSettings()))
+  app.post('/api/settings', (req, res) => {
+    const settings = z
+      .object({
+        worker: modelSchema,
+        reviewer: modelSchema,
+        reviewTimeoutMs: z.number().int().min(2000).max(60000),
+      })
+      .parse(req.body)
+    res.json(manager.updateSettings(settings))
+  })
+  app.post('/api/settings/test', async (req, res) => {
+    const { role } = z.object({ role: z.enum(['worker', 'reviewer']) }).parse(req.body)
+    const result = await complete(
+      manager.settings[role],
+      [{ role: 'user', content: '请只回复 OK' }],
+      undefined,
+      undefined,
+      15000,
+    )
+    res.json({
+      ok: !!result.content,
+      message: result.content ? '连接成功，服务已返回响应。' : '服务没有返回文本，请检查接口。',
+    })
+  })
+  app.get('/api/runs', (_req, res) => res.json(manager.list()))
+  app.post('/api/runs', (req, res) => {
+    const body = z
+      .object({ prompt: z.string().trim().min(3).max(6000), mode: z.enum(['demo', 'live']) })
+      .parse(req.body)
+    res.status(201).json(manager.create(body.prompt, body.mode))
+  })
+  app.get('/api/runs/:id', (req, res) => res.json(manager.get(req.params.id)))
+  app.post('/api/runs/:id/start', async (req, res) => {
+    const { constraints } = z
+      .object({ constraints: z.array(z.string().trim().min(1).max(2000)).min(1).max(8) })
+      .parse(req.body)
+    res.json(await manager.start(req.params.id, constraints))
+  })
+  app.post('/api/runs/:id/verdict', (req, res) =>
+    res.json(manager.runtime(req.params.id).verdict(verdictSchema.parse(req.body))),
+  )
+  app.post('/api/runs/:id/additions', async (req, res) => {
+    const input = z
+      .object({
+        requestId: z.string().uuid(),
+        revision: z.number().int().positive(),
+        kind: z.enum(['requirement', 'idea']),
+        text: z.string().trim().min(1).max(3000),
+        replaceConstraintId: z.string().uuid().optional(),
+      })
+      .parse(req.body)
+    res.json(await manager.addInput(req.params.id, input))
+  })
+  app.post('/api/runs/:id/stop', (req, res) => {
+    const { requestId } = z.object({ requestId: z.string().uuid() }).parse(req.body)
+    manager.runtime(req.params.id).requestStop(undefined, true, requestId)
+    res.json(manager.get(req.params.id))
+  })
+  app.post('/api/runs/:id/reflection', (req, res) => {
+    const { reflection } = z.object({ reflection: z.string().max(3000) }).parse(req.body),
+      state = manager.get(req.params.id)
+    state.reflection = reflection
+    manager.store.append(state, 'human.reflection', { reflection })
+    manager.store.save(state)
+    manager.publish(state)
+    res.json(state)
+  })
+  app.get('/api/runs/:id/summary', (req, res) => res.json(manager.summary(req.params.id)))
+  app.get('/api/runs/:id/events', (req, res) =>
+    res.json(
+      manager.store.events(
+        manager.get(req.params.id).id,
+        Math.max(0, Number(req.query.after) || 0),
+      ),
+    ),
+  )
+  app.get('/api/runs/:id/stream', (req, res) => {
+    const state = manager.get(req.params.id)
+    res.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    res.flushHeaders()
+    const send = (s: RunState) => {
+      if (s.id === state.id)
+        res.write(`id: ${s.lastEventSeq}\nevent: state\ndata: ${JSON.stringify(s)}\n\n`)
+    }
+    send(state)
+    manager.events.on('state', send)
+    const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000)
+    req.on('close', () => {
+      clearInterval(heartbeat)
+      manager.events.off('state', send)
+    })
+  })
+  app.get('/api/runs/:id/export', (req, res) => {
+    const state = manager.get(req.params.id)
+    res.setHeader('Content-Disposition', `attachment; filename="decision-record-${state.id}.json"`)
+    res.json({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      state,
+      summary: manager.summary(state.id),
+      events: manager.store.events(state.id),
+    })
+  })
+  app.get('/artifacts/:id/{*file}', (req, res) => {
+    const state = manager.get(String(req.params.id)),
+      file = Array.isArray(req.params.file) ? req.params.file.join('/') : String(req.params.file)
+    if (!state.files.some((f) => f.path === file)) {
+      res.status(404).send('文件尚未生成')
+      return
+    }
+    const workspace = new Workspace(path.join(manager.store.directory(state.id), 'workspace'))
+    res.set({
+      'Content-Security-Policy':
+        "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; form-action 'none'; sandbox allow-scripts allow-forms",
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'no-store',
+    })
+    res.type(path.extname(file))
+    res.send(workspace.read(file))
+  })
+  app.use('/api', (_req, res) => res.status(404).json({ error: '接口不存在' }))
+  return app
+}
+export const errorHandler: express.ErrorRequestHandler = (error, _req, res, _next) => {
+  if (error instanceof z.ZodError) {
+    res.status(400).json({
+      error: '输入格式不正确，请检查字段内容',
+      details: error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+    })
+    return
+  }
+  res
+    .status(error.status ?? 400)
+    .json({ error: error instanceof Error ? error.message : '请求未完成' })
+}
