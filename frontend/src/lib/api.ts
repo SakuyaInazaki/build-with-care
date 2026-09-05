@@ -10,7 +10,7 @@ export async function api<T>(url: string, body?: unknown, method = 'POST'): Prom
   if (!response.ok) throw new Error(data.error ?? '操作未完成，请稍后重试。')
   return data as T
 }
-export const bootstrap = () => api<{ runs: RunState[]; settings: PublicSettings }>('/api/bootstrap')
+export const bootstrap = () => api<{ runs: RunState[]; settings: PublicSettings; backendVersion?: string }>('/api/bootstrap')
 export const requestId = () => crypto.randomUUID()
 export const dateLabel = (value: string) =>
   new Date(value).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })

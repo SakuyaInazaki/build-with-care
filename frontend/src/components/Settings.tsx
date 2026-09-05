@@ -116,7 +116,7 @@ export function Settings({
       setDeepseekKey('')
       setSelections(selectionFrom(result))
       setEfforts(effortFrom(result))
-      setMessage('已保存')
+      setMessage('设置已保存')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '设置未保存。')
     } finally {
@@ -128,8 +128,8 @@ export function Settings({
     setError('')
     setMessage('')
     try {
-      const result = await api<{ message: string }>('/api/settings/test', { role })
-      setMessage(`${roleLabel(role)}：${result.message}`)
+      await api<{ message: string }>('/api/settings/test', { role })
+      setMessage('连接成功，服务已返回响应')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '连接失败。')
     } finally {
@@ -308,7 +308,7 @@ export function Settings({
           </summary>
           <div className="settings-timing">
             <div>
-              <label htmlFor="review-timeout">审查等待（秒）</label>
+              <label htmlFor="review-timeout">审查耗时提示（秒）</label>
               <input
                 id="review-timeout"
                 type="number"
@@ -341,7 +341,7 @@ export function Settings({
           </div>
         )}
         {message && (
-          <p className="saved-note" role="status">
+          <p className="saved-note" role="status" aria-live="polite">
             <Check size={16} /> {message}
           </p>
         )}

@@ -30,6 +30,213 @@ async function listen(server: Server) {
   return `http://127.0.0.1:${(server.address() as { port: number }).port}`
 }
 
+it('executes two declared units on the live adapters without leaking review context across units', async () => {
+  const reviewInputs: any[] = []
+  let workerRound = 0
+  const baseUrl = await listen(
+    createServer(async (req, res) => {
+      let raw = ''
+      for await (const chunk of req) raw += chunk
+      const body = JSON.parse(raw)
+      let message: any
+      if (req.url?.includes('/reviewer/')) {
+        reviewInputs.push(JSON.parse(body.messages[1].content))
+        message = {
+          content: JSON.stringify({
+            classification: 'execution',
+            title: '实现单元目标',
+            summary: '按声明执行',
+            impact: '',
+            constraintIds: [],
+            evidence: '',
+            options: [],
+            topic: 'unit',
+          }),
+        }
+      } else {
+        const round = ++workerRound
+        const path = `unit-${round}.html`
+        const calls =
+          round <= 2
+            ? [
+                {
+                  name: 'begin_unit',
+                  arguments: {
+                    goal: `UNIT_${round}_PRIVATE_GOAL`,
+                    decisions: [],
+                    plan: [{ tool: 'write_file', path }],
+                  },
+                },
+                {
+                  name: 'write_file',
+                  arguments: {
+                    path,
+                    content: `<html><head><title>页面</title></head><body>UNIT_${round}_PRIVATE_BODY</body></html>`,
+                    intent: '实现单元',
+                  },
+                },
+                { name: 'end_unit', arguments: { summary: `UNIT_${round}_PRIVATE_SUMMARY` } },
+              ]
+            : []
+        message = {
+          content: '执行计划',
+          tool_calls: calls.map((call, index) => ({
+            id: `unit-${round}-call-${index}`,
+            type: 'function',
+            function: { name: call.name, arguments: JSON.stringify(call.arguments) },
+          })),
+        }
+      }
+      res.setHeader('Content-Type', 'application/json')
+      res.end(
+        JSON.stringify({
+          choices: [{ message, finish_reason: message.tool_calls?.length ? 'tool_calls' : 'stop' }],
+        }),
+      )
+    }),
+  )
+  const { manager } = setup()
+  const model = { model: 'test', family: 'test', apiKey: '' }
+  manager.updateSettings({
+    worker: { ...model, baseUrl: `${baseUrl}/worker` },
+    reviewer: { ...model, baseUrl: `${baseUrl}/reviewer` },
+    reviewTimeoutMs: 2000,
+  })
+  const state = manager.create('生成两个页面', 'live')
+  await manager.start(
+    state.id,
+    state.constraints.map((c) => c.text),
+  )
+  await until(() => ['completed', 'error'].includes(state.status))
+  expect(state.error).toBeUndefined()
+  expect(state.workUnits?.map((unit) => unit.status)).toEqual(['completed', 'completed'])
+  expect(state.files).toHaveLength(2)
+  expect(reviewInputs).toHaveLength(4)
+  const secondUnitReviews = reviewInputs.filter(
+    (input) => input.workUnit.goal === 'UNIT_2_PRIVATE_GOAL',
+  )
+  expect(secondUnitReviews).toHaveLength(2)
+  expect(JSON.stringify(secondUnitReviews)).not.toContain('UNIT_1_PRIVATE')
+  expect(secondUnitReviews[0].unitHistory).toEqual([])
+  expect(secondUnitReviews[1].unitHistory.map((step: any) => step.tool)).toEqual(['begin_unit'])
+  expect(state.steps.every((step) => !!step.unitId)).toBe(true)
+})
+
+it('uses saved model settings on the next request without cancelling active worker or review calls', async () => {
+  const seen: { model: string; auth?: string; url: string }[] = []
+  let releaseWorker!: () => void, releaseReview!: () => void
+  const baseUrl = await listen(
+    createServer(async (req, res) => {
+      let raw = ''
+      for await (const chunk of req) raw += chunk
+      const body = JSON.parse(raw)
+      seen.push({ model: body.model, auth: req.headers.authorization, url: req.url! })
+      const reply = (message: unknown) => {
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ choices: [{ message, finish_reason: 'stop' }] }))
+      }
+      if (seen.length === 1)
+        releaseWorker = () =>
+          reply({
+            content: '',
+            tool_calls: [
+              {
+                id: 'switch-test',
+                type: 'function',
+                function: {
+                  name: 'write_file',
+                  arguments: JSON.stringify({
+                    path: 'index.html',
+                    content: demoHtml('memory'),
+                    intent: 'write',
+                  }),
+                },
+              },
+            ],
+          })
+      else if (req.url?.includes('/reviewer/'))
+        releaseReview = () =>
+          reply({
+            content: JSON.stringify({
+              classification: 'execution',
+              title: '符合要求',
+              summary: '核对完成',
+              impact: '',
+              constraintIds: [],
+              evidence: '',
+              options: [],
+              topic: 'test',
+            }),
+          })
+      else reply({ content: '已完成' })
+    }),
+  )
+  const { manager } = setup()
+  const config = (role: string, model: string) => ({
+    baseUrl: `${baseUrl}/${role}`,
+    model,
+    family: 'test',
+    apiKey: `${model}-test-key`,
+  })
+  manager.updateSettings({
+    worker: config('worker', 'pro'),
+    reviewer: config('reviewer', 'pro-review'),
+    reviewTimeoutMs: 2000,
+  })
+  const state = manager.create(DEMO_PROMPT, 'live')
+  // These fixtures model persisted pre-work-unit tasks; the strict protocol has separate coverage.
+  state.workUnitProtocol = false
+  await manager.start(
+    state.id,
+    state.constraints.map((c) => c.text),
+  )
+  const constraints = structuredClone(state.constraints)
+  await until(() => !!releaseWorker)
+  manager.updateSettings({
+    worker: config('worker', 'flash'),
+    reviewer: config('reviewer', 'flash-review'),
+    reviewTimeoutMs: 2000,
+  })
+  expect(state.status).toBe('running')
+  expect(state.workerLabel).toBe('pro')
+  releaseWorker()
+  await until(() => !!releaseReview)
+  expect(seen.map((r) => r.model)).toEqual(['pro', 'flash-review'])
+  manager.updateSettings({
+    worker: config('worker-next', 'flash-next'),
+    reviewer: config('reviewer', 'review-next'),
+    reviewTimeoutMs: 2000,
+  })
+  expect(state.status).toBe('running')
+  expect(state.reviewerLabel).toBe('flash-review')
+  releaseReview()
+  await until(() => state.status === 'completed')
+  expect(seen).toEqual([
+    { model: 'pro', auth: 'Bearer pro-test-key', url: '/worker/chat/completions' },
+    {
+      model: 'flash-review',
+      auth: 'Bearer flash-review-test-key',
+      url: '/reviewer/chat/completions',
+    },
+    {
+      model: 'flash-next',
+      auth: 'Bearer flash-next-test-key',
+      url: '/worker-next/chat/completions',
+    },
+  ])
+  expect(state.workerLabel).toBe('flash-next')
+  expect(state.constraints).toEqual(constraints)
+  expect(state.revision).toBe(1)
+  expect(state.steps[0].status).toBe('done')
+  const events = manager.store.events(state.id)
+  expect(
+    events.filter((e) => e.type === 'model.response').map((e) => (e.data as any).model),
+  ).toEqual(['pro', 'flash-next'])
+  expect(
+    events.some((e) => ['run.stopping', 'run.interrupted', 'review.failed'].includes(e.type)),
+  ).toBe(false)
+})
+
 it('uses the actual compatible worker and independent reviewer adapters with a local mock upstream', async () => {
   const requests: { url: string; auth?: string; body: any }[] = []
   let workerStage = 0
@@ -120,6 +327,8 @@ it('uses the actual compatible worker and independent reviewer adapters with a l
     reviewTimeoutMs: 2000,
   })
   const state = manager.create(DEMO_PROMPT, 'live')
+  // These fixtures model persisted pre-work-unit tasks; the strict protocol has separate coverage.
+  state.workUnitProtocol = false
   await manager.start(
     state.id,
     state.constraints.map((c) => c.text),
@@ -164,6 +373,63 @@ it('uses the actual compatible worker and independent reviewer adapters with a l
     expect(readFileSync(path.join(manager.store.directory(state.id), file), 'utf8')).not.toContain(
       '-test-secret',
     )
+})
+
+it('exposes authenticated in-place review retry and expanded event details', async () => {
+  const { manager } = setup()
+  const state = manager.create(DEMO_PROMPT, 'demo')
+  let failed = false
+  await manager.start(
+    state.id,
+    state.constraints.map((c) => c.text),
+    {
+      reviewer: async () => {
+        if (!failed) {
+          failed = true
+          throw new Error('连接中断')
+        }
+        return {
+          classification: 'execution',
+          title: '审查完成',
+          summary: '测试通过',
+          impact: '',
+          constraintIds: [],
+          evidence: '',
+          options: [],
+          topic: 'test',
+          source: 'system',
+        }
+      },
+    },
+  )
+  await until(() => !!state.reviewFailure)
+  const app = createApp(manager)
+  app.use(errorHandler)
+  const baseUrl = await listen(createServer(app))
+  const bootstrap = await fetch(`${baseUrl}/api/bootstrap`)
+  const cookie = bootstrap.headers.get('set-cookie')!.split(';')[0]
+  const endpoint = `${baseUrl}/api/runs/${state.id}/retry-review`
+  expect((await fetch(endpoint, { method: 'POST' })).status).toBe(401)
+  const stepId = state.reviewFailure!.stepId
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId: randomUUID(), revision: state.revision, stepId }),
+  })
+  expect(response.status).toBe(200)
+  await until(() => state.status === 'completed')
+  const event = manager.store.events(state.id).find((entry) => entry.type === 'tool.finished')!
+  const detailResponse = await fetch(
+    `${baseUrl}/api/runs/${state.id}/events/${event.seq}/details`,
+    { headers: { cookie } },
+  )
+  expect(detailResponse.status).toBe(200)
+  const detail = await detailResponse.json()
+  expect(detail.action.id).toBe(stepId)
+  expect(detail.action.args.content).toContain('<!doctype html>')
+  expect(detail.action.result).toBeTruthy()
+  expect(detail.modelResponse.content.some((block: any) => block.type === 'tool-call')).toBe(true)
+  expect(detail.modelResponse.usage).toBeUndefined() // Scripted demo has no real token usage.
 })
 
 it('requires a local browser session and never returns configured secrets', async () => {

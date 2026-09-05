@@ -28,6 +28,10 @@ export interface Review {
   source: 'demo-rule' | 'independent-model' | 'system'
 }
 export interface Step {
+  unitId?: string
+  externalSideEffect?: boolean
+  artifactPaths?: string[]
+  removedArtifactPaths?: string[]
   id: string
   callId: string
   tool: string
@@ -42,6 +46,7 @@ export interface Step {
   artifactChanged?: boolean
 }
 export interface Decision {
+  unitId?: string
   id: string
   stepIds: string[]
   review: Review
@@ -91,6 +96,7 @@ export interface Verification {
   stale: boolean
   detail: string
   createdAt: string
+  revision?: number
 }
 export interface AppEvent {
   id: string
@@ -101,6 +107,8 @@ export interface AppEvent {
   data: unknown
 }
 export interface RunState {
+  workUnits?: WorkUnit[]
+  workUnitProtocol?: boolean
   id: string
   title: string
   prompt: string
@@ -120,10 +128,30 @@ export interface RunState {
   reflection: string
   lastEventSeq: number
   error?: string
+  modelProgress?: {
+    phase: 'connecting' | 'thinking' | 'writing' | 'reviewing' | 'review-slow'
+    startedAt: string
+    characters: number
+    lastReceivedAt?: string
+  }
+  reviewFailure?: { stepId: string; message: string }
   runtime: string
   workerLabel: string
   reviewerLabel: string
   grill?: GrillState
+}
+export interface WorkUnit {
+  id: string
+  goal: string
+  decisions: { domain: string; choice: string; rationale?: string; specifiedByHuman?: boolean }[]
+  plan: { tool: string; path?: string }[]
+  nextCall: number
+  stepIds: string[]
+  revision: number
+  status: 'declared' | 'active' | 'completed' | 'cancelled'
+  createdAt: string
+  closedAt?: string
+  summary?: string
 }
 export interface GrillQuestion {
   title: string

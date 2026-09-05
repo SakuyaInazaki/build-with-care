@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import type { AppEvent, RunState } from '../../../decision-desk/shared/types.js'
-import { timelineEntries } from './timeline.js'
+import { timelineEntries, timelineGroups } from './timeline.js'
 
 const run = { steps: [], workerLabel: 'DeepSeek V4 Pro' } as unknown as RunState
 const event = (seq: number, type: string, data: unknown = {}): AppEvent => ({
@@ -10,6 +10,32 @@ const event = (seq: number, type: string, data: unknown = {}): AppEvent => ({
   data,
   runId: 'test',
   at: '2026-09-05T10:00:00.000Z',
+})
+
+it('shows the model used by each request instead of rewriting history with the current label', () => {
+  const entries = timelineEntries([
+    event(1, 'model.request', { model: 'deepseek-v4-pro' }),
+    event(2, 'model.request', { model: 'deepseek-v4-flash' }),
+  ], { ...run, workerLabel: 'deepseek-v4-flash' })
+  expect(entries.map((entry) => entry.summary)).toEqual(['deepseek-v4-pro', 'deepseek-v4-flash'])
+})
+
+it('groups unit steps and review events without mixing the next unit or inventing legacy units', () => {
+  const unit = (id: string) => ({ id, goal: `目标${id}`, status: 'completed', createdAt: '2026-09-05T10:00:00.000Z', closedAt: '2026-09-05T10:01:00.000Z' })
+  const state = { ...run, decisions: [], workUnits: [unit('one'), unit('two')], steps: [
+    { id: 's1', unitId: 'one', tool: 'write_file' }, { id: 's2', unitId: 'two', tool: 'write_file' },
+  ] } as unknown as RunState
+  const events = [event(1, 'run.created'), event(2, 'unit.declared', { unitId: 'one' }),
+    event(3, 'review.started', { stepId: 's1' }), event(4, 'model.request'),
+    event(5, 'unit.closed', { unitId: 'one' }), event(6, 'model.request'),
+    event(7, 'unit.declared', { unitId: 'two' }), event(8, 'tool.finished', { stepId: 's2' }),
+    event(9, 'unit.closed', { unitId: 'two' })]
+  const groups = timelineGroups(events, state)
+  expect(groups.map(group => group.events.map(item => item.seq))).toEqual([[2, 3, 4, 5], [7, 8, 9], [1, 6]])
+  expect(groups[0].stepCount).toBe(1)
+  expect(groups[0].elapsed).toBe('1 分 0 秒')
+  expect(groups[0].status).toBe('已结束')
+  expect(timelineGroups(events.slice(0, 1), run)[0].title).toBe('早期过程记录')
 })
 
 it('excludes internal repair notes while preserving real failures and the corrected control action', () => {

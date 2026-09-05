@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { fixture } from './helpers.js'
 import { confirmGrill, emptyGrill, nextGrill } from '../server/grill.js'
-import { complete } from '../server/models.js'
+import { completeStream } from '../server/models.js'
 
 const fixtures: ReturnType<typeof fixture>[] = []
 afterEach(async () => {
@@ -33,7 +33,7 @@ it('isolates Grill context from execution and does not call tools', async () => 
     at: run.createdAt,
   })
   const ask = vi
-    .fn<typeof complete>()
+    .fn<typeof completeStream>()
     .mockResolvedValue(
       response({
         kind: 'question',
@@ -62,7 +62,7 @@ it('rejects stale answers and a sixth question, then permits final confirmation 
     answers: Array.from({ length: 4 }, () => ({ question: '前题', answer: '已回答' })),
   }
   const ask = vi
-    .fn<typeof complete>()
+    .fn<typeof completeStream>()
     .mockResolvedValue(
       response({ kind: 'question', title: '第六题', reason: '', options: ['是', '否'] }),
     )
@@ -106,6 +106,35 @@ it('blocks execution until assumptions and unresolved items are explicitly confi
       unresolved: [{ item: '活动日期', answer: '保持未指定' }],
     }),
   ).toEqual(['用户修改后的要求', '单页结构', '活动日期：保持未指定'])
+})
+
+it('preserves multiple choices and supplementary text for the model and saved history', async () => {
+  const { manager } = setup()
+  const run = manager.create('制作一个页面', 'demo')
+  run.grill = {
+    ...emptyGrill(), status: 'question', round: 1,
+    question: { title: '需要哪些功能？', reason: '', options: ['搜索', '收藏', '导出'] },
+  }
+  const ask = vi.fn<typeof completeStream>().mockResolvedValue(response({
+    kind: 'confirmation', constraints: ['支持搜索和收藏'], assumptions: [], unresolved: [],
+  }))
+  const next = await nextGrill(run, manager.settings, {
+    round: 1, choices: ['搜索', '收藏'], answer: '收藏按日期排序',
+  }, ask)
+  const saved = next.answers[0].answer
+  expect(saved).toBe('已选选项：\n- 搜索\n- 收藏\n\n补充回答：\n收藏按日期排序')
+  const sent = JSON.parse(ask.mock.calls[0][1][1].content as string)
+  expect(sent.answers[0].answer).toBe(saved)
+  // The streaming completion receives no deadline or tool list.
+  expect(ask.mock.calls[0]).toHaveLength(2)
+  expect(ask.mock.calls[0][1][0].content).not.toContain('互斥中文选项')
+  await expect(nextGrill(run, manager.settings, { round: 1, choices: ['旧题选项'] }, ask))
+    .rejects.toThrow('不属于当前问题')
+  expect(ask).toHaveBeenCalledTimes(1)
+  const single = await nextGrill(run, manager.settings, { round: 1, choices: ['搜索'] }, ask)
+  expect(single.answers[0].answer).toBe('已选选项：\n- 搜索')
+  const free = await nextGrill(run, manager.settings, { round: 1, answer: '我需要打印' }, ask)
+  expect(free.answers[0].answer).toBe('我需要打印')
 })
 
 it('allows identical model providers and physically deletes a task while retaining an independent audit', async () => {

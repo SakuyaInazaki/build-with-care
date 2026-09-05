@@ -7,6 +7,7 @@ import { Manager } from './manager.js'
 import { Workspace } from './workspace.js'
 import { complete } from './models.js'
 import { settingsPatchSchema } from './settings-store.js'
+import { eventDetails } from './event-details.js'
 
 const verdictSchema = z.object({
   requestId: z.string().uuid(),
@@ -28,11 +29,16 @@ const verdictSchema = z.object({
   replaceConstraintId: z.string().uuid().optional(),
 })
 export function createApp(manager: Manager) {
-  const app = express(),
+  const app = express()
+  let token = randomBytes(32).toString('hex'),
+    tokenExpiresAt = Date.now() + 86400000
+  const renewToken = () => {
     token = randomBytes(32).toString('hex')
+    tokenExpiresAt = Date.now() + 86400000
+  }
   app.disable('x-powered-by')
   app.use(express.json({ limit: '1mb' }))
-  app.use('/api', (req, res, next) => {
+  app.use(['/api', '/artifacts'], (req, res, next) => {
     const host = req.get('host') ?? ''
     if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) {
       res.status(403).json({ error: '只允许本地访问' })
@@ -56,6 +62,7 @@ export function createApp(manager: Manager) {
         .find((c) => c.startsWith('decision_session='))
         ?.slice('decision_session='.length) ?? ''
     if (
+      Date.now() >= tokenExpiresAt ||
       !/^[a-f0-9]{64}$/.test(candidate) ||
       !timingSafeEqual(Buffer.from(candidate), Buffer.from(token))
     ) {
@@ -65,15 +72,17 @@ export function createApp(manager: Manager) {
     next()
   })
   app.get('/api/bootstrap', (_req, res) => {
+    if (Date.now() >= tokenExpiresAt) renewToken()
     res.cookie('decision_session', token, {
       httpOnly: true,
       sameSite: 'strict',
       path: '/',
-      maxAge: 86400000,
+      maxAge: Math.max(1, tokenExpiresAt - Date.now()),
     })
     res.json({
       settings: manager.publicSettings(),
       runs: manager.list(),
+      backendVersion: 'unified-work-units-v3',
       runtime: 'dsh 0.1.2-rc.1',
     })
   })
@@ -104,11 +113,18 @@ export function createApp(manager: Manager) {
     res.status(201).json(manager.create(body.prompt, body.mode, body.mode === 'live'))
   })
   app.get('/api/runs/:id', (req, res) => res.json(manager.get(req.params.id)))
+  app.post('/api/runs/:id/verify', (req, res) => {
+    const input = z
+      .object({ requestId: z.string().uuid(), revision: z.number().int().positive() })
+      .parse(req.body)
+    res.json(manager.verifyArtifacts(req.params.id, input))
+  })
   app.post('/api/runs/:id/grill', async (req, res) => {
     const input = z
       .object({
         round: z.number().int().min(0).max(5),
-        answer: z.string().trim().min(1).max(4000).optional(),
+        answer: z.string().trim().min(1).max(12100).optional(),
+        choices: z.array(z.string().min(1).max(2000)).max(4).optional(),
       })
       .parse(req.body)
     res.json(await manager.advanceGrill(req.params.id, input))
@@ -140,6 +156,16 @@ export function createApp(manager: Manager) {
       .parse(req.body)
     res.json(await manager.resume(req.params.id, input))
   })
+  app.post('/api/runs/:id/retry-review', (req, res) => {
+    const input = z
+      .object({
+        requestId: z.string().uuid(),
+        revision: z.number().int().positive(),
+        stepId: z.string().uuid(),
+      })
+      .parse(req.body)
+    res.json(manager.runtime(req.params.id).retryReview(input, manager.settings))
+  })
   app.post('/api/runs/:id/verdict', (req, res) =>
     res.json(manager.runtime(req.params.id).verdict(verdictSchema.parse(req.body))),
   )
@@ -170,6 +196,7 @@ export function createApp(manager: Manager) {
     res.json(state)
   })
   app.get('/api/runs/:id/summary', (req, res) => res.json(manager.summary(req.params.id)))
+  app.get('/api/runs/:id/units', (req, res) => res.json(manager.get(req.params.id).workUnits ?? []))
   app.get('/api/runs/:id/events', (req, res) =>
     res.json(
       manager.store.events(
@@ -187,17 +214,54 @@ export function createApp(manager: Manager) {
       'X-Accel-Buffering': 'no',
     })
     res.flushHeaders()
+    let closed = false,
+      blocked = false,
+      pendingState: RunState | undefined
+    const flush = () => {
+      blocked = false
+      if (!closed && pendingState) {
+        const latest = pendingState
+        pendingState = undefined
+        send(latest)
+      }
+    }
+    const write = (value: string) => {
+      if (closed || blocked) return false
+      if (!res.write(value)) {
+        blocked = true
+        res.once('drain', flush)
+      }
+      return !blocked
+    }
     const send = (s: RunState) => {
-      if (s.id === state.id)
-        res.write(`id: ${s.lastEventSeq}\nevent: state\ndata: ${JSON.stringify(s)}\n\n`)
+      if (s.id !== state.id || closed) return
+      if (blocked) {
+        pendingState = s
+        return
+      }
+      write(`id: ${s.lastEventSeq}\nevent: state\ndata: ${JSON.stringify(s)}\n\n`)
     }
     send(state)
     manager.events.on('state', send)
-    const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000)
+    const heartbeat = setInterval(() => write(': heartbeat\n\n'), 15000)
+    const expiry = setTimeout(() => res.end(), Math.max(1, tokenExpiresAt - Date.now()))
+    expiry.unref()
     req.on('close', () => {
+      closed = true
+      pendingState = undefined
       clearInterval(heartbeat)
+      clearTimeout(expiry)
       manager.events.off('state', send)
+      res.off('drain', flush)
     })
+  })
+  app.get('/api/runs/:id/events/:seq/details', (req, res) => {
+    const detail = eventDetails(manager.store, manager.get(req.params.id), Number(req.params.seq))
+    if (!detail) {
+      res.status(404).json({ error: '记录不存在' })
+      return
+    }
+    res.json(detail)
   })
   app.get('/api/runs/:id/export', (req, res) => {
     const state = manager.get(req.params.id)

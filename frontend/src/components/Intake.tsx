@@ -14,10 +14,13 @@ export function Intake({
   notify: (text: string) => void
 }) {
   const [answer, setAnswer] = useState('')
-  const [choice, setChoice] = useState('')
+  const [choices, setChoices] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const grill = run.grill
+  const combinedAnswer = choices.length
+    ? `已选选项：\n${choices.map((choice) => `- ${choice}`).join('\n')}${answer.trim() ? `\n\n补充回答：\n${answer.trim()}` : ''}`
+    : answer.trim()
   const next = async () => {
     setBusy(true)
     setError('')
@@ -25,11 +28,13 @@ export function Intake({
       update(
         await api<RunState>(`/api/runs/${run.id}/grill`, {
           round: grill?.round ?? 0,
-          ...(grill?.status === 'question' ? { answer: answer.trim() || choice } : {}),
+          ...(grill?.status === 'question'
+            ? { answer: combinedAnswer }
+            : {}),
         }),
       )
       setAnswer('')
-      setChoice('')
+      setChoices([])
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '需求整理未完成。')
     } finally {
@@ -38,18 +43,6 @@ export function Intake({
   }
   return (
     <div className="intake">
-      <div className="intake-progress">
-        <span>
-          {grill?.status === 'confirm' || run.mode === 'demo'
-            ? '最后一步 · 由你确认'
-            : `需求澄清 · ${grill?.round ? `第 ${grill.round} 题` : '尚未开始'} / 最多 5 题`}
-        </span>
-        <span className="progress-dots">
-          {Array.from({ length: 5 }, (_, index) => (
-            <i key={index} className={index < (grill?.round ?? 0) ? 'filled' : ''} />
-          ))}
-        </span>
-      </div>
       {error && (
         <div className="error-banner" role="alert">
           {error}
@@ -73,16 +66,20 @@ export function Intake({
           <p>{grill?.question?.reason ?? ''}</p>
           {grill?.question && (
             <>
-              <div className="question-options" role="radiogroup" aria-label="本轮选项">
+              <div className="question-options" role="group" aria-label="本轮选项">
                 {grill.question.options.map((option, index) => (
                   <label className="question-option" key={option}>
                     <input
-                      type="radio"
+                      type="checkbox"
                       name="grill-choice"
-                      checked={choice === option && !answer}
+                      disabled={busy}
+                      checked={choices.includes(option)}
                       onChange={() => {
-                        setChoice(option)
-                        setAnswer('')
+                        setChoices((previous) =>
+                          previous.includes(option)
+                            ? previous.filter((value) => value !== option)
+                            : [...previous, option],
+                        )
                       }}
                     />
                     <span>
@@ -92,14 +89,12 @@ export function Intake({
                   </label>
                 ))}
               </div>
-              <label htmlFor="grill-answer">也可以用自己的话回答</label>
+              <label htmlFor="grill-answer">补充回答</label>
               <textarea
                 id="grill-answer"
                 value={answer}
-                onChange={(event) => {
-                  setAnswer(event.target.value)
-                  if (event.target.value) setChoice('')
-                }}
+                disabled={busy}
+                onChange={(event) => setAnswer(event.target.value)}
                 maxLength={4000}
                 placeholder="写下你的具体要求…"
               />
@@ -108,7 +103,7 @@ export function Intake({
           <div className="form-actions">
             <button
               className="button primary"
-              disabled={busy || (!!grill?.question && !answer.trim() && !choice)}
+              disabled={busy || (!!grill?.question && !answer.trim() && !choices.length)}
             >
               {busy ? <Spinner /> : <ArrowRight size={16} />}
               {busy ? '正在整理…' : grill?.question ? '确认回答，继续' : '开始澄清'}

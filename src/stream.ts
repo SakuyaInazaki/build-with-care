@@ -10,7 +10,7 @@ import type {
   TimelineEvent, TimelineEventSource, TimelineEventType, VerificationEvidence, WorkspaceSnapshotAdapter,
 } from './types.js'
 import { extractDecisions, isConstraintConflict, matchDecisions, structureConstraint, structureSpecConstraints, verdictForUnit } from './work-unit.js'
-import type { StructuredDecision, UnitToolCall, WorkUnitInput } from './types.js'
+import type { UnitToolCall, WorkUnitInput } from './types.js'
 
 const runFile = promisify(execFile)
 
@@ -89,7 +89,9 @@ export class LocalAgentExecutor implements AgentExecutor {
       }
       if (action.kind === 'command' && typeof action.args.command === 'string') {
         const command = action.args.command.trim()
-        const match = /^(node|npm)\s+(--version|version|test|run\s+(typecheck|build))$/.exec(command)
+        const match = /^(?:node --version|npm (?:--version|test|run (?:typecheck|build)))$/.exec(
+          command,
+        )
         if (!match || /[;&|`$<>]/.test(command)) return { ok: false, error: 'command is not in the demo-safe allowlist' }
         const [executable, ...args] = command.split(/\s+/)
         const result = await runFile(executable!, args, { cwd: this.root(), signal })

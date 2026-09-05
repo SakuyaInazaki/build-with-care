@@ -13,11 +13,21 @@ export interface TimelineEntry {
   checks: { name: string; passed: boolean; detail: string }[]
 }
 const titles: Record<string, string> = {
+  'unit.declared': '提出工作单元',
+  'unit.started': '开始工作单元',
+  'unit.call-bound': '执行单元计划',
+  'unit.closed': '结束工作单元',
   'run.created': '创建任务',
   'constraints.confirmed': '确认执行要求',
   'grill.updated': '需求澄清',
   'run.started': '开始执行',
   'model.request': '请求执行模型',
+  'model.response': '模型生成完成',
+  'review.started': '开始审查动作',
+  'review.slow': '审查仍在进行',
+  'review.completed': '审查结果已返回',
+  'review.retry-requested': '重试审查',
+  'review.recovered': '恢复待审查动作',
   'tool.proposed': '提出执行动作',
   'tool.allowed': '审查通过',
   'tool.finished': '动作执行完成',
@@ -48,6 +58,9 @@ const titles: Record<string, string> = {
   message: '执行消息',
 }
 const tools: Record<string, string> = {
+  begin_unit: '声明工作单元',
+  end_unit: '结束工作单元',
+  run_command: '运行命令',
   list_files: '查看项目文件',
   read_file: '读取文件',
   write_file: '写入文件',
@@ -58,6 +71,56 @@ export function isHumanEvent(event: AppEvent) {
   return event.type.startsWith('human.') || event.type === 'constraints.confirmed'
 }
 const readable = (value: unknown) => (typeof value === 'string' ? value : '')
+
+export interface TimelineGroup {
+  id: string
+  title: string
+  status: string
+  at: string
+  elapsed: string
+  stepCount: number
+  events: AppEvent[]
+}
+
+export function timelineGroups(events: AppEvent[], run: RunState, currentTime = Date.now()): TimelineGroup[] {
+  const steps = new Map(run.steps.map(step => [step.id, step]))
+  const groups = new Map<string, TimelineGroup>()
+  for (const unit of run.workUnits ?? []) {
+    const seconds = Math.max(0, Math.round(((unit.closedAt ? Date.parse(unit.closedAt) : currentTime) - Date.parse(unit.createdAt)) / 1000))
+    groups.set(unit.id, {
+      id: unit.id, title: unit.goal,
+      status: { declared: '待审查', active: '进行中', completed: '已结束', cancelled: '已取消' }[unit.status],
+      at: unit.createdAt,
+      elapsed: Number.isFinite(seconds) ? (seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`) : '',
+      stepCount: run.steps.filter(step => step.unitId === unit.id && !['begin_unit', 'end_unit'].includes(step.tool)).length,
+      events: [],
+    })
+  }
+  const other: AppEvent[] = []
+  let active: string | undefined
+  for (const event of [...events].sort((a, b) => a.seq - b.seq)) {
+    if (event.type === 'run.control-reclassified') continue
+    const data = (event.data ?? {}) as Record<string, any>
+    const stepId = data.stepId ?? data.step?.id ?? data.gate?.stepId ?? data.intervention?.stepId
+    const step = steps.get(stepId)
+    const decision = run.decisions?.find(item => item.id === (data.decisionId ?? data.intervention?.decisionId))
+    if (event.type === 'unit.declared') active = data.unitId
+    const activeUnit = run.workUnits?.find(unit => unit.id === active)
+    if (activeUnit?.closedAt && event.at > activeUnit.closedAt) active = undefined
+    const inferred = /^(model\.|review\.|tool\.|artifact\.|verification\.|message$)/.test(event.type) ? active : undefined
+    const id = data.unitId ?? step?.unitId ?? data.step?.unitId ?? decision?.unitId ?? inferred
+    const group = id ? groups.get(id) : undefined
+    if (group) group.events.push(event)
+    else other.push(event)
+    if (event.type === 'unit.closed' || /^run\.(stopped|interrupted|failed|error|settled)$/.test(event.type)) active = undefined
+  }
+  const result = [...groups.values()].sort((a, b) => a.at.localeCompare(b.at))
+  if (other.length) result.push({
+    id: 'task-records', title: run.workUnits?.length ? '任务记录' : '早期过程记录',
+    status: `${other.length} 条记录`, at: other[0].at, elapsed: '', stepCount: 0, events: other,
+  })
+  return result
+}
 
 export function timelineEntries(events: AppEvent[], run: RunState): TimelineEntry[] {
   const steps = new Map(run.steps.map((step) => [step.id, step]))
@@ -124,6 +187,7 @@ export function timelineEntries(events: AppEvent[], run: RunState): TimelineEntr
         readable(data.message) ||
         readable(data.text) ||
         readable(data.reason) ||
+        readable(data.review?.summary) ||
         readable(step?.args?.intent) ||
         readable(data.path) ||
         readable(step?.args?.path) ||
@@ -133,7 +197,15 @@ export function timelineEntries(events: AppEvent[], run: RunState): TimelineEntr
       if (event.type === 'constraints.confirmed') summary = `已确认 ${requirements.length} 条要求`
       if (event.type === 'grill.updated')
         summary = data.status === 'confirm' ? '整理确认清单' : `第 ${data.round} 轮澄清`
-      if (event.type === 'model.request') summary = run.workerLabel
+      if (event.type === 'model.request') summary = data.model ?? run.workerLabel
+      if (event.type.startsWith('unit.'))
+        summary =
+          data.summary ??
+          data.goal ??
+          run.workUnits?.find((unit) => unit.id === data.unitId)?.goal ??
+          ''
+      if (event.type === 'model.response')
+        summary = `${data.model ?? run.workerLabel} · ${(Number(data.elapsedMs ?? 0) / 1000).toFixed(1)} 秒`
       if (
         correctedControl ||
         ['run.resume-requested', 'run.explicit-continuation'].includes(event.type)
@@ -142,6 +214,10 @@ export function timelineEntries(events: AppEvent[], run: RunState): TimelineEntr
       if (checks.length)
         summary = `${checks.filter((check: { passed: boolean }) => check.passed).length} / ${checks.length} 项检查通过`
       const fields: TimelineEntry['fields'] = []
+      if (data.usage) {
+        fields.push({ label: '输入 token', value: String(data.usage.inputTokens ?? 0) })
+        fields.push({ label: '输出 token', value: String(data.usage.outputTokens ?? 0) })
+      }
       if (step?.tool) fields.push({ label: '动作', value: tools[step.tool] ?? step.tool })
       const file = readable(data.path) || readable(step?.args?.path)
       if (file) fields.push({ label: '文件', value: file })

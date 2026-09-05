@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import type { AppEvent, RunState } from '../../../decision-desk/shared/types.js'
 import { timeLabel } from '../lib/api.js'
-import { timelineEntries, type EventTone } from '../lib/timeline.js'
+import { timelineEntries, timelineGroups, type EventTone } from '../lib/timeline.js'
 import { Empty } from './ui.js'
 
 function EventIcon({ tone }: { tone: EventTone }) {
@@ -32,27 +32,78 @@ function EventIcon({ tone }: { tone: EventTone }) {
 export function Activity({ run }: { run: RunState }) {
   const [events, setEvents] = useState<AppEvent[]>([])
   const [error, setError] = useState('')
-  const [filter, setFilter] = useState('all')
   const [retry, setRetry] = useState(0)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [raw, setRaw] = useState(false)
-  const rail = useRef<HTMLOListElement>(null)
-  const buttons = useRef(new Map<string, HTMLButtonElement>())
+  const [groupId, setGroupId] = useState<string | null>(null)
+  const [currentTime, setCurrentTime] = useState(Date.now)
+  const active = run.workUnits?.some(unit => ['declared', 'active'].includes(unit.status))
+  useEffect(() => {
+    if (!active) return
+    const timer = setInterval(() => setCurrentTime(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [active])
   useEffect(() => {
     const controller = new AbortController()
     void fetch(`/api/runs/${run.id}/events`, { signal: controller.signal })
-      .then(async (response) => {
+      .then(async response => {
         const result = await response.json()
         if (!response.ok) throw new Error(result.error ?? '记录读取失败。')
         setEvents(result)
         setError('')
-      })
-      .catch((cause) => {
-        if (!controller.signal.aborted)
-          setError(cause instanceof Error ? cause.message : '记录读取失败。')
+      }).catch(cause => {
+        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : '记录读取失败。')
       })
     return () => controller.abort()
   }, [run.id, run.lastEventSeq, retry])
+  const groups = useMemo(() => timelineGroups(events, run, currentTime), [events, run, currentTime])
+  const taskRecords = groups.find(group => group.id === 'task-records')
+  const unitGroups = groups.filter(group => group.id !== 'task-records')
+  const selected = groups.find(group => group.id === groupId)
+  const selectedIsTaskRecords = selected?.id === 'task-records'
+  return (
+    <section className="unit-timeline" aria-label="工作单元时间线">
+      {error && <div className="error-banner" role="alert">{error}<button className="button secondary" onClick={() => setRetry(retry + 1)}>重新加载</button></div>}
+      {taskRecords && <ul className="unit-rail" aria-label="任务记录">
+        <li>
+          <button className="unit-summary" aria-expanded={selectedIsTaskRecords}
+            aria-controls="unit-events" onClick={() => setGroupId(selectedIsTaskRecords ? null : taskRecords.id)}>
+            <span className="unit-summary-meta"><span>任务记录</span><span>{taskRecords.status}</span></span>
+            <strong>{taskRecords.title}</strong>
+            <span className="unit-summary-meta"><time dateTime={taskRecords.at}>{timeLabel(taskRecords.at)}</time></span>
+            <span className="unit-open-label">{selectedIsTaskRecords ? '收起记录' : '查看记录'}<ChevronsRight size={15} /></span>
+          </button>
+        </li>
+      </ul>}
+      <ol className="unit-rail" aria-label="工作单元">
+        {unitGroups.map((group, index) => (
+          <li key={group.id}>
+            <button className="unit-summary" aria-expanded={selected?.id === group.id}
+              aria-controls="unit-events" onClick={() => setGroupId(selected?.id === group.id ? null : group.id)}>
+              <span className="unit-summary-meta"><span>{`单元 ${index + 1}`}</span><span>{group.status}</span></span>
+              <strong>{group.title}</strong>
+              <span className="unit-summary-meta"><time dateTime={group.at}>{timeLabel(group.at)}</time><span>{`${group.stepCount} 步 · ${group.elapsed}`}</span></span>
+              <span className="unit-open-label">{selected?.id === group.id ? '收起步骤' : '查看步骤'}<ChevronsRight size={15} /></span>
+            </button>
+          </li>
+        ))}
+      </ol>
+      {selected && <section id="unit-events" className="unit-events" aria-label={`${selected.title}的${selectedIsTaskRecords ? '记录' : '步骤'}`}>
+        <header className="unit-events-heading"><h2>{selected.title}</h2><button className="button secondary" onClick={() => setGroupId(null)}>{selectedIsTaskRecords ? '收起记录' : '收起步骤'}</button></header>
+        <EventTimeline key={selected.id} run={run} events={[...selected.events, ...events.filter(event => event.type === 'run.control-reclassified')]} />
+      </section>}
+      {!groups.length && !error && <Empty icon={<History size={25} />} title="暂无过程记录" />}
+    </section>
+  )
+}
+
+function EventTimeline({ run, events }: { run: RunState; events: AppEvent[] }) {
+  const [filter, setFilter] = useState('all')
+  const [retry, setRetry] = useState(0)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [raw, setRaw] = useState(false)
+  const [rawDetail, setRawDetail] = useState<unknown>(null)
+  const [rawError, setRawError] = useState('')
+  const rail = useRef<HTMLOListElement>(null)
+  const buttons = useRef(new Map<string, HTMLButtonElement>())
   const entries = useMemo(
     () =>
       timelineEntries(events, run).filter(
@@ -63,6 +114,25 @@ export function Activity({ run }: { run: RunState }) {
     [events, run, filter],
   )
   const selected = entries.find((entry) => entry.event.id === selectedId) ?? entries.at(-1)
+  useEffect(() => {
+    if (!raw || !selected) return
+    const controller = new AbortController()
+    setRawDetail(null)
+    setRawError('')
+    void fetch(`/api/runs/${run.id}/events/${selected.event.seq}/details`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error ?? '记录读取失败。')
+        setRawDetail(result)
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setRawError(cause instanceof Error ? cause.message : '记录读取失败。')
+      })
+    return () => controller.abort()
+  }, [raw, selected?.event.id, run.id, run.lastEventSeq, retry])
   const index = selected ? entries.indexOf(selected) : -1
   const reveal = (id: string) => {
     const viewport = rail.current
@@ -145,14 +215,6 @@ export function Activity({ run }: { run: RunState }) {
           </button>
         </div>
       </div>
-      {error && (
-        <div className="error-banner" role="alert">
-          {error}
-          <button className="button secondary" onClick={() => setRetry(retry + 1)}>
-            重新加载
-          </button>
-        </div>
-      )}
       {selected ? (
         <>
           <ol
@@ -242,7 +304,18 @@ export function Activity({ run }: { run: RunState }) {
               </button>
             </header>
             {raw ? (
-              <pre className="timeline-source">{JSON.stringify(selected.event.data, null, 2)}</pre>
+              rawError ? (
+                <div className="error-banner">
+                  {rawError}
+                  <button className="button secondary" onClick={() => setRetry(retry + 1)}>
+                    重新加载
+                  </button>
+                </div>
+              ) : (
+                <pre className="timeline-source">
+                  {rawDetail ? JSON.stringify(rawDetail, null, 2) : '正在读取完整记录…'}
+                </pre>
+              )
             ) : (
               <div className="timeline-content-body">
                 {selected.summary && <p className="timeline-summary">{selected.summary}</p>}
