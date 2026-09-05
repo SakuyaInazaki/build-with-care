@@ -82,7 +82,8 @@ export function createApp(manager: Manager) {
     res.json({
       settings: manager.publicSettings(),
       runs: manager.list(),
-      backendVersion: 'unified-work-units-v3',
+      backendVersion: 'unified-work-units-v4',
+      capabilities: ['task-archive-v1', 'grill-batch-v1'],
       runtime: 'dsh 0.1.2-rc.1',
     })
   })
@@ -113,6 +114,10 @@ export function createApp(manager: Manager) {
     res.status(201).json(manager.create(body.prompt, body.mode, body.mode === 'live'))
   })
   app.get('/api/runs/:id', (req, res) => res.json(manager.get(req.params.id)))
+  app.post('/api/runs/:id/archive', (req, res) => {
+    const input = z.object({ requestId: z.string().uuid(), archive: z.boolean() }).parse(req.body)
+    res.json(manager.archive(req.params.id, input))
+  })
   app.post('/api/runs/:id/verify', (req, res) => {
     const input = z
       .object({ requestId: z.string().uuid(), revision: z.number().int().positive() })
@@ -122,9 +127,20 @@ export function createApp(manager: Manager) {
   app.post('/api/runs/:id/grill', async (req, res) => {
     const input = z
       .object({
-        round: z.number().int().min(0).max(5),
+        round: z.number().int().min(0).max(6),
         answer: z.string().trim().min(1).max(12100).optional(),
         choices: z.array(z.string().min(1).max(2000)).max(4).optional(),
+        answers: z
+          .array(
+            z.object({
+              questionId: z.string().uuid().optional(),
+              question: z.string().trim().min(1).max(2000).optional(),
+              choices: z.array(z.string().min(1).max(2000)).max(4).optional(),
+              answer: z.string().max(4000).optional(),
+            }),
+          )
+          .max(3)
+          .optional(),
       })
       .parse(req.body)
     res.json(await manager.advanceGrill(req.params.id, input))
@@ -187,13 +203,8 @@ export function createApp(manager: Manager) {
     res.json(manager.get(req.params.id))
   })
   app.post('/api/runs/:id/reflection', (req, res) => {
-    const { reflection } = z.object({ reflection: z.string().max(3000) }).parse(req.body),
-      state = manager.get(req.params.id)
-    state.reflection = reflection
-    manager.store.append(state, 'human.reflection', { reflection })
-    manager.store.save(state)
-    manager.publish(state)
-    res.json(state)
+    const { reflection } = z.object({ reflection: z.string().max(3000) }).parse(req.body)
+    res.json(manager.updateReflection(req.params.id, reflection))
   })
   app.get('/api/runs/:id/summary', (req, res) => res.json(manager.summary(req.params.id)))
   app.get('/api/runs/:id/units', (req, res) => res.json(manager.get(req.params.id).workUnits ?? []))

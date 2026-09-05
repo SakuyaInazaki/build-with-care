@@ -178,6 +178,8 @@ export class Store {
                       : 'corrected'
             }
             if (event.type === 'human.reflection') state.reflection = data.reflection
+            if (event.type === 'run.archived') state.archivedAt = data.archivedAt ?? event.at
+            if (event.type === 'run.restored') state.archivedAt = undefined
             state.lastEventSeq = Math.max(state.lastEventSeq, event.seq)
           }
           if (tail.length) this.save(state)

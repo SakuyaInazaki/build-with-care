@@ -79,14 +79,16 @@ export function Board({
           <span className="muted">{constraints.length} 条</span>
           <ChevronDown className={constraintsOpen ? 'rotated' : ''} size={15} />
         </button>
-        <button
-          className="button text-button"
-          onClick={() => setAdding(!adding)}
-          disabled={run.status === 'ready' || run.status === 'stopping'}
-        >
-          <Plus size={16} />
-          补充要求
-        </button>
+        {!run.archivedAt && (
+          <button
+            className="button text-button"
+            onClick={() => setAdding(!adding)}
+            disabled={run.status === 'ready' || run.status === 'stopping'}
+          >
+            <Plus size={16} />
+            补充要求
+          </button>
+        )}
       </div>
       {constraintsOpen && (
         <div className="constraint-sheet">
@@ -102,7 +104,7 @@ export function Board({
           </details>
         </div>
       )}
-      {adding && (
+      {adding && !run.archivedAt && (
         <Addition run={run} update={update} close={() => setAdding(false)} notify={notify} />
       )}
       <div className="board" aria-label="按状态分栏的决策看板">
@@ -328,7 +330,7 @@ function DecisionDetail({
     ? Math.max(0, Math.ceil((Date.parse(item.gate.expiresAt) - now) / 1000))
     : 0
   const stale = !!item.gate && (item.gate.revision !== run.revision || remaining === 0)
-  const disabled = busy || isReadOnly(run) || stale
+  const disabled = busy || isReadOnly(run) || !!run.archivedAt || stale
   const review = item.decision?.review ?? item.steps.at(-1)?.review
   const constraints = run.constraints.filter((constraint) =>
     review?.constraintIds.includes(constraint.id),
@@ -483,7 +485,7 @@ function DecisionDetail({
             : '要求已更新，此卡须按新版本重新审查。'}
         </div>
       )}
-      {item.decision && (
+      {item.decision && !run.archivedAt && (
         <div className="decision-controls">
           {item.gate && (
             <div className="gate-note">

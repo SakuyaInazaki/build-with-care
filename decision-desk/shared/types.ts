@@ -116,6 +116,7 @@ export interface RunState {
   status: RunStatus
   createdAt: string
   updatedAt: string
+  archivedAt?: string
   revision: number
   constraints: Constraint[]
   steps: Step[]
@@ -154,15 +155,26 @@ export interface WorkUnit {
   summary?: string
 }
 export interface GrillQuestion {
+  id?: string
   title: string
   reason: string
   options: string[]
+}
+export interface GrillAnswer {
+  questionId?: string
+  question: string
+  answer: string
+  choices?: string[]
+  supplement?: string
+  skipped?: boolean
 }
 export interface GrillState {
   status: 'idle' | 'question' | 'confirm' | 'confirmed'
   round: number
   question?: GrillQuestion
-  answers: { question: string; answer: string }[]
+  questions?: GrillQuestion[]
+  answers: GrillAnswer[]
+  pendingAnswers?: GrillAnswer[]
   constraints: string[]
   assumptions: string[]
   unresolved: string[]

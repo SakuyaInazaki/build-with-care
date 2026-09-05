@@ -65,6 +65,11 @@ export class Manager {
     if (!state) throw Object.assign(new Error('任务不存在'), { status: 404 })
     return state
   }
+  assertMutable(id: string) {
+    const state = this.get(id)
+    if (state.archivedAt) throw new ConflictError('任务已归档，请先恢复后再操作。')
+    return state
+  }
   publicSettings(): PublicSettings {
     const safe = ({ apiKey, ...model }: Settings['worker']) => ({ ...model, hasKey: !!apiKey })
     return {
@@ -162,21 +167,49 @@ export class Manager {
     this.publish(state)
     return state
   }
-  async advanceGrill(id: string, input: { round: number; answer?: string; choices?: string[] }) {
+  async advanceGrill(
+    id: string,
+    input: {
+      round: number
+      answer?: string
+      choices?: string[]
+      answers?: {
+        questionId?: string
+        question?: string
+        choices?: string[]
+        answer?: string
+      }[]
+    },
+  ) {
     if (this.grilling.has(id)) throw new ConflictError('正在整理本轮回答，请稍候。')
-    const state = this.get(id)
+    const state = this.assertMutable(id)
     if (state.mode !== 'live') throw new ConflictError('开发测试记录不调用需求模型。')
     if (!this.configured()) throw new ConflictError('请先配置模型。')
     this.grilling.add(id)
+    const pendingAnswersBefore = JSON.stringify(state.grill?.pendingAnswers)
     try {
       state.grill = await nextGrill(state, this.settings, input)
       this.store.append(state, 'grill.updated', {
         round: state.grill.round,
         status: state.grill.status,
+        questionCount: state.grill.questions?.length ?? (state.grill.question ? 1 : 0),
       })
       this.store.save(state)
       this.publish(state)
       return state
+    } catch (error) {
+      if (
+        state.grill?.pendingAnswers?.length &&
+        JSON.stringify(state.grill.pendingAnswers) !== pendingAnswersBefore
+      ) {
+        this.store.append(state, 'grill.answers-preserved', {
+          round: state.grill.round,
+          answers: state.grill.pendingAnswers,
+        })
+        this.store.save(state)
+        this.publish(state)
+      }
+      throw error
     } finally {
       this.grilling.delete(id)
     }
@@ -187,7 +220,7 @@ export class Manager {
     options?: RuntimeOptions,
     confirmation?: GrillConfirmation,
   ) {
-    const state = this.get(id)
+    const state = this.assertMutable(id)
     if (state.status !== 'ready') throw new ConflictError('任务已经开始，不能重复启动')
     if (this.grilling.has(id)) throw new ConflictError('请等待当前澄清完成。')
     if (state.grill) constraints = confirmGrill(state.grill, constraints, confirmation)
@@ -216,7 +249,7 @@ export class Manager {
     return state
   }
   async addInput(id: string, input: AdditionInput) {
-    const state = this.get(id)
+    const state = this.assertMutable(id)
     const prior = state.interventions.find((i) => i.requestId === input.requestId)
     if (prior) return state
     if (input.revision !== state.revision) throw new ConflictError('要求已更新，请核对后重新提交')
@@ -278,7 +311,7 @@ export class Manager {
     input: { requestId: string; revision: number },
     options?: RuntimeOptions,
   ) {
-    const state = this.get(id)
+    const state = this.assertMutable(id)
     if (
       this.store
         .events(id)
@@ -350,7 +383,7 @@ export class Manager {
     }
   }
   verifyArtifacts(id: string, input: { requestId: string; revision: number }) {
-    const state = this.get(id)
+    const state = this.assertMutable(id)
     if (
       this.store
         .events(id)
@@ -379,10 +412,79 @@ export class Manager {
     return state
   }
   runtime(id: string) {
-    this.get(id)
+    this.assertMutable(id)
     const runtime = this.runtimes.get(id)
     if (!runtime) throw new ConflictError('旧决策不能重新放行。请使用“继续任务”。')
     return runtime
+  }
+  archive(id: string, input: { requestId: string; archive: boolean }) {
+    const state = this.get(id)
+    const prior = this.store
+      .events(id)
+      .find(
+        (event) =>
+          ['run.archived', 'run.restored', 'run.archive-unchanged'].includes(event.type) &&
+          (event.data as { requestId?: string }).requestId === input.requestId,
+      )
+    if (prior) {
+      const priorArchive =
+        prior.type === 'run.archive-unchanged'
+          ? (prior.data as { archive: boolean }).archive
+          : prior.type === 'run.archived'
+      if (priorArchive !== input.archive)
+        throw new ConflictError('同一个请求标识不能用于不同的归档操作。')
+      return state
+    }
+    if (input.archive === !!state.archivedAt) {
+      this.store.append(state, 'run.archive-unchanged', {
+        requestId: input.requestId,
+        archive: input.archive,
+        archivedAt: state.archivedAt,
+        status: state.status,
+      })
+      this.store.save(state)
+      this.publish(state)
+      return state
+    }
+    if (!input.archive) {
+      const archivedAt = state.archivedAt
+      this.store.append(state, 'run.restored', {
+        requestId: input.requestId,
+        archivedAt,
+        status: state.status,
+      })
+      state.archivedAt = undefined
+      this.store.save(state)
+      this.publish(state)
+      return state
+    }
+    if (!['ready', 'completed', 'error', 'stopped', 'interrupted'].includes(state.status))
+      throw new ConflictError('正在执行、等待决定或停止中的任务不能归档。')
+    if (this.continuing.has(id) || this.grilling.has(id))
+      throw new ConflictError('任务正在切换状态，请稍候再归档。')
+    const runtime = this.runtimes.get(id)
+    if (runtime && !runtime.isIdleForArchive())
+      throw new ConflictError('任务仍有执行调用正在收尾，请稍候再归档。')
+    if (state.gates.some((gate) => gate.status === 'pending'))
+      throw new ConflictError('任务仍有待处理决定，暂时不能归档。')
+    const archivedAt = new Date().toISOString()
+    this.store.append(state, 'run.archived', {
+      requestId: input.requestId,
+      archivedAt,
+      status: state.status,
+    })
+    state.archivedAt = archivedAt
+    this.store.save(state)
+    this.publish(state)
+    return state
+  }
+  updateReflection(id: string, reflection: string) {
+    const state = this.assertMutable(id)
+    state.reflection = reflection
+    this.store.append(state, 'human.reflection', { reflection })
+    this.store.save(state)
+    this.publish(state)
+    return state
   }
   async delete(id: string) {
     const state = this.get(id)

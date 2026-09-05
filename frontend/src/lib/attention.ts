@@ -9,6 +9,7 @@ export interface AttentionItem {
 
 export function attentionItems(runs: RunState[]): AttentionItem[] {
   return runs.flatMap(run => {
+    if (run.archivedAt) return []
     const item = (key: string, message: string): AttentionItem => ({ key: `${run.id}:${key}`, runId: run.id, task: run.title, message })
     const pending = run.gates.filter(gate => gate.status === 'pending')
     if (pending.length) return pending.map(gate => item(`gate:${gate.id}`, '有一项决定需要你判断。'))

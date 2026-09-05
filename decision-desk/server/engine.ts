@@ -105,6 +105,7 @@ export class DecisionRuntime {
   private retriedReviews = new Set<string>()
   private recoveryController?: AbortController
   private recoveryTask?: Promise<void>
+  private recoveryActive = false
   private failures = new Map<string, number>()
   private workerRequestModel?: string
 
@@ -366,6 +367,7 @@ export class DecisionRuntime {
       )
       if (recoveryStep) {
         this.recoveryController = new AbortController()
+        this.recoveryActive = true
         this.recoveryTask = ctx.tools
           .execute({
             callId: ToolCallId(recoveryStep.callId),
@@ -384,6 +386,9 @@ export class DecisionRuntime {
             )
           })
           .catch((error) => this.fail(error))
+          .finally(() => {
+            this.recoveryActive = false
+          })
       } else startAgent()
     } catch (error) {
       this.fail(error)
@@ -1371,6 +1376,9 @@ export class DecisionRuntime {
     this.commit('run.error', { message: this.state.error })
     this.recoveryController?.abort(new Error('任务已停止'))
     this.agent?.cancel({ kind: 'user' })
+  }
+  isIdleForArchive() {
+    return !this.recoveryActive && (!this.agent || this.agent.status === 'idle')
   }
   async dispose() {
     if (!this.stopRequested && ['running', 'waiting'].includes(this.state.status))
