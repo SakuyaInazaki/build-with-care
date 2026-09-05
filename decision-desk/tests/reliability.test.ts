@@ -30,7 +30,7 @@ const execution: Review = {
 }
 
 describe('pending operations and evidence', () => {
-  it('fails closed when a reviewer ignores its timeout and still allows stopping', async () => {
+  it('keeps a review timeout as a retryable execution error, without creating a human decision or gate', async () => {
     const { manager } = setup({ reviewTimeoutMs: 30 }),
       state = manager.create(DEMO_PROMPT, 'demo')
     await manager.start(
@@ -38,12 +38,20 @@ describe('pending operations and evidence', () => {
       state.constraints.map((c) => c.text),
       { reviewer: () => new Promise(() => {}) },
     )
-    await until(() => state.status === 'waiting')
-    expect(state.steps[0].review?.classification).toBe('uncertain')
+    await until(() => state.status === 'error')
+    expect(state.error).toBe('审查服务超时，本次动作未执行。')
     expect(state.files).toHaveLength(0)
-    manager.runtime(state.id).requestStop()
-    await until(() => state.status === 'stopped')
-    expect(state.gates[0].status).toBe('cancelled')
+    expect(state.decisions).toHaveLength(0)
+    expect(state.gates).toHaveLength(0)
+    expect(manager.store.events(state.id).some((event) => event.type === 'review.failed')).toBe(
+      true,
+    )
+    const constraints = structuredClone(state.constraints)
+    const revision = state.revision
+    await manager.resume(state.id, { requestId: randomUUID(), revision })
+    await until(() => ['completed', 'waiting'].includes(state.status))
+    expect(state.constraints).toEqual(constraints)
+    expect(state.revision).toBe(revision)
   })
 
   it('cancels an in-flight uncooperative reviewer immediately', async () => {

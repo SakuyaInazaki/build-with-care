@@ -1,23 +1,38 @@
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
-import type { AdditionInput, Mode, PublicSettings, RunState, Settings } from '../shared/types.js'
+import type {
+  AdditionInput,
+  GrillConfirmation,
+  Mode,
+  PublicSettings,
+  RunState,
+  Settings,
+} from '../shared/types.js'
 import { Store } from './store.js'
+import { SettingsStore } from './settings-store.js'
 import { ConflictError, DecisionRuntime, type RuntimeOptions } from './engine.js'
 import { completionUrl } from './models.js'
+import { confirmGrill, emptyGrill, nextGrill } from './grill.js'
+import {
+  DEEPSEEK_BASE_URL,
+  DEFAULT_DEEPSEEK_MODEL,
+  isDeepSeekBaseUrl,
+} from '../shared/model-presets.js'
 
+const modelDefaults = (role: 'WORKER' | 'REVIEWER'): Settings['worker'] => {
+  const baseUrl = process.env[`${role}_BASE_URL`] || DEEPSEEK_BASE_URL
+  const official = isDeepSeekBaseUrl(baseUrl)
+  return {
+    baseUrl,
+    model: process.env[`${role}_MODEL`] || (official ? DEFAULT_DEEPSEEK_MODEL : ''),
+    family: process.env[`${role}_FAMILY`] || (official ? 'deepseek' : ''),
+    apiKey:
+      process.env[`${role}_API_KEY`] || (official ? (process.env.DEEPSEEK_API_KEY ?? '') : ''),
+  }
+}
 export const defaultSettings = (): Settings => ({
-  worker: {
-    baseUrl: process.env.WORKER_BASE_URL ?? 'https://api.deepseek.com/v1',
-    model: process.env.WORKER_MODEL ?? 'deepseek-chat',
-    family: process.env.WORKER_FAMILY ?? 'deepseek',
-    apiKey: process.env.WORKER_API_KEY ?? '',
-  },
-  reviewer: {
-    baseUrl: process.env.REVIEWER_BASE_URL ?? '',
-    model: process.env.REVIEWER_MODEL ?? '',
-    family: process.env.REVIEWER_FAMILY ?? '',
-    apiKey: process.env.REVIEWER_API_KEY ?? '',
-  },
+  worker: modelDefaults('WORKER'),
+  reviewer: modelDefaults('REVIEWER'),
   reviewTimeoutMs: 8000,
   gateTimeoutMs: 600000,
   demoDelayMs: 1000,
@@ -29,9 +44,12 @@ export class Manager {
   readonly events = new EventEmitter()
   settings: Settings
   private continuing = new Set<string>()
+  private grilling = new Set<string>()
+  private readonly settingsStore: SettingsStore
   constructor(root: string, settings = defaultSettings()) {
     this.store = new Store(root)
-    this.settings = settings
+    this.settingsStore = new SettingsStore(this.store.root)
+    this.settings = this.settingsStore.load(settings)
     for (const state of this.store.loadAll()) this.states.set(state.id, state)
     this.events.setMaxListeners(100)
   }
@@ -54,40 +72,50 @@ export class Manager {
       reviewTimeoutMs: this.settings.reviewTimeoutMs,
       gateTimeoutMs: this.settings.gateTimeoutMs,
       configured: this.configured(),
+      sharedDeepSeekKey:
+        !!this.settings.worker.apiKey &&
+        this.settings.worker.apiKey === this.settings.reviewer.apiKey &&
+        isDeepSeekBaseUrl(this.settings.worker.baseUrl) &&
+        isDeepSeekBaseUrl(this.settings.reviewer.baseUrl),
     }
   }
   configured() {
-    return (
-      [this.settings.worker, this.settings.reviewer].every(
-        (c) =>
-          c.baseUrl &&
-          c.model &&
-          c.family &&
-          (c.apiKey || /^http:\/\/(localhost|127\.0\.0\.1)(:|\/)/.test(c.baseUrl)),
-      ) && this.settings.worker.family.toLowerCase() !== this.settings.reviewer.family.toLowerCase()
+    return [this.settings.worker, this.settings.reviewer].every(
+      (c) =>
+        c.baseUrl &&
+        c.model &&
+        c.family &&
+        (c.apiKey || /^http:\/\/(localhost|127\.0\.0\.1)(:|\/)/.test(c.baseUrl)),
     )
   }
   updateSettings(patch: {
     worker: Settings['worker']
     reviewer: Settings['reviewer']
     reviewTimeoutMs: number
+    gateTimeoutMs?: number
   }) {
+    patch = structuredClone(patch)
     completionUrl(patch.worker.baseUrl)
     completionUrl(patch.reviewer.baseUrl)
-    if (patch.worker.family.toLowerCase() === patch.reviewer.family.toLowerCase())
-      throw new Error('请为审查模型选择与执行模型不同的模型来源')
     for (const role of ['worker', 'reviewer'] as const) {
       const old = this.settings[role],
         next = patch[role]
       // An empty password only retains the credential for the very same endpoint.
-      if (!next.apiKey && old.baseUrl === next.baseUrl) next.apiKey = old.apiKey
+      if (
+        !next.apiKey &&
+        (old.baseUrl === next.baseUrl ||
+          (isDeepSeekBaseUrl(old.baseUrl) && isDeepSeekBaseUrl(next.baseUrl)))
+      )
+        next.apiKey = old.apiKey
     }
-    this.settings = { ...this.settings, ...patch }
+    const settings = { ...this.settings, ...patch }
+    this.settingsStore.save(settings)
+    this.settings = settings
     return this.publicSettings()
   }
-  create(prompt: string, mode: Mode): RunState {
+  create(prompt: string, mode: Mode, withGrill = false): RunState {
     if (mode === 'live' && !this.configured())
-      throw new ConflictError('请先设置执行模型和异源审查模型')
+      throw new ConflictError('请先设置执行模型和独立审查模型')
     const at = new Date().toISOString(),
       id = randomUUID()
     const pieces = prompt
@@ -122,6 +150,7 @@ export class Manager {
       runtime: 'dsh 0.1.2-rc.1 · 串行工具执行',
       workerLabel: mode === 'demo' ? '演示执行器' : this.settings.worker.model,
       reviewerLabel: mode === 'demo' ? '演示规则审查' : this.settings.reviewer.model,
+      ...(withGrill ? { grill: emptyGrill() } : {}),
     }
     this.states.set(id, state)
     this.store.append(state, 'run.created', { prompt, mode, constraints: state.constraints })
@@ -129,9 +158,35 @@ export class Manager {
     this.publish(state)
     return state
   }
-  async start(id: string, constraints: string[], options?: RuntimeOptions) {
+  async advanceGrill(id: string, input: { round: number; answer?: string }) {
+    if (this.grilling.has(id)) throw new ConflictError('正在整理本轮回答，请稍候。')
+    const state = this.get(id)
+    if (state.mode !== 'live') throw new ConflictError('开发测试记录不调用需求模型。')
+    if (!this.configured()) throw new ConflictError('请先配置模型。')
+    this.grilling.add(id)
+    try {
+      state.grill = await nextGrill(state, this.settings, input)
+      this.store.append(state, 'grill.updated', {
+        round: state.grill.round,
+        status: state.grill.status,
+      })
+      this.store.save(state)
+      this.publish(state)
+      return state
+    } finally {
+      this.grilling.delete(id)
+    }
+  }
+  async start(
+    id: string,
+    constraints: string[],
+    options?: RuntimeOptions,
+    confirmation?: GrillConfirmation,
+  ) {
     const state = this.get(id)
     if (state.status !== 'ready') throw new ConflictError('任务已经开始，不能重复启动')
+    if (this.grilling.has(id)) throw new ConflictError('请等待当前澄清完成。')
+    if (state.grill) constraints = confirmGrill(state.grill, constraints, confirmation)
     if (
       this.list().some((s) => s.id !== id && ['running', 'waiting', 'stopping'].includes(s.status))
     )
@@ -143,6 +198,7 @@ export class Manager {
       revision: 1,
       active: true,
     }))
+    if (state.grill) state.grill.status = 'confirmed'
     const runtime = new DecisionRuntime(
       state,
       this.store,
@@ -161,6 +217,13 @@ export class Manager {
     if (prior) return state
     if (input.revision !== state.revision) throw new ConflictError('要求已更新，请核对后重新提交')
     if (!input.text.trim()) throw new ConflictError('请写下要补充的内容')
+    if (
+      input.kind === 'requirement' &&
+      /^(?:请)?(?:继续|继续实现|继续执行|继续任务|恢复执行|恢复任务)[。.!！\s]*$/u.test(
+        input.text.trim(),
+      )
+    )
+      throw new ConflictError('继续执行请使用“继续任务”，无需新增要求。')
     if (
       input.replaceConstraintId &&
       (input.kind !== 'requirement' ||
@@ -205,12 +268,73 @@ export class Manager {
       this.continuing.delete(id)
     }
   }
+  async resume(
+    id: string,
+    input: { requestId: string; revision: number },
+    options?: RuntimeOptions,
+  ) {
+    const state = this.get(id)
+    if (
+      this.store
+        .events(id)
+        .some(
+          (event) =>
+            event.type === 'run.resume-requested' &&
+            (event.data as { requestId?: string }).requestId === input.requestId,
+        )
+    )
+      return state
+    if (input.revision !== state.revision) throw new ConflictError('要求已更新，请重新确认后继续。')
+    if (!['interrupted', 'stopped', 'error'].includes(state.status))
+      throw new ConflictError('当前任务无需恢复。')
+    if (this.continuing.has(id) || this.grilling.has(id))
+      throw new ConflictError('任务正在切换状态，请稍候。')
+    if (
+      this.list().some((s) => s.id !== id && ['running', 'waiting', 'stopping'].includes(s.status))
+    )
+      throw new ConflictError('另一个任务正在执行，请先结束它再继续本任务。')
+    if (state.mode === 'live' && !this.configured())
+      throw new ConflictError('请先配置模型，再继续任务。')
+    this.continuing.add(id)
+    const previousStatus = state.status
+    try {
+      const disposing = this.runtimes.get(id)?.dispose()
+      state.status = 'running'
+      await disposing
+      const runtime = new DecisionRuntime(
+        state,
+        this.store,
+        structuredClone(this.settings),
+        this.publish,
+        { ...options, continuation: true },
+      )
+      this.runtimes.set(id, runtime)
+      state.error = undefined
+      runtime.commit('run.resume-requested', { ...input, previousStatus })
+      await runtime.start()
+      return state
+    } finally {
+      this.continuing.delete(id)
+    }
+  }
   runtime(id: string) {
     this.get(id)
     const runtime = this.runtimes.get(id)
-    if (!runtime)
-      throw new ConflictError('旧决策不能重新放行。请在追加区补充新要求，基于现有成果继续。')
+    if (!runtime) throw new ConflictError('旧决策不能重新放行。请使用“继续任务”。')
     return runtime
+  }
+  async delete(id: string) {
+    const state = this.get(id)
+    if (
+      ['running', 'waiting', 'stopping'].includes(state.status) ||
+      this.grilling.has(id) ||
+      this.continuing.has(id)
+    )
+      throw new ConflictError('请先停止活动任务，再删除数据。')
+    await this.runtimes.get(id)?.dispose()
+    this.store.delete(id)
+    this.runtimes.delete(id)
+    this.states.delete(id)
   }
   summary(id: string) {
     const state = this.get(id),

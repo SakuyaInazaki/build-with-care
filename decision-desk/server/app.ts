@@ -6,19 +6,24 @@ import type { RunState } from '../shared/types.js'
 import { Manager } from './manager.js'
 import { Workspace } from './workspace.js'
 import { complete } from './models.js'
+import { settingsPatchSchema } from './settings-store.js'
 
-const modelSchema = z.object({
-  baseUrl: z.string().min(1).max(500),
-  model: z.string().trim().min(1).max(100),
-  family: z.string().trim().min(1).max(60),
-  apiKey: z.string().max(2000),
-})
 const verdictSchema = z.object({
   requestId: z.string().uuid(),
   revision: z.number().int().positive(),
   decisionId: z.string().uuid(),
   gateId: z.string().uuid().optional(),
-  action: z.enum(['correct', 'enforce', 'allow-once', 'acknowledge']),
+  action: z
+    .enum(['correct', 'enforce', 'allow-once', 'acknowledge', 'rewrite', 'alternative', 'allow'])
+    .transform((action) =>
+      action === 'rewrite'
+        ? ('enforce' as const)
+        : action === 'alternative'
+          ? ('correct' as const)
+          : action === 'allow'
+            ? ('allow-once' as const)
+            : action,
+    ),
   text: z.string().trim().max(2000).optional(),
   replaceConstraintId: z.string().uuid().optional(),
 })
@@ -74,13 +79,7 @@ export function createApp(manager: Manager) {
   })
   app.get('/api/settings', (_req, res) => res.json(manager.publicSettings()))
   app.post('/api/settings', (req, res) => {
-    const settings = z
-      .object({
-        worker: modelSchema,
-        reviewer: modelSchema,
-        reviewTimeoutMs: z.number().int().min(2000).max(60000),
-      })
-      .parse(req.body)
+    const settings = settingsPatchSchema.parse(req.body)
     res.json(manager.updateSettings(settings))
   })
   app.post('/api/settings/test', async (req, res) => {
@@ -102,14 +101,44 @@ export function createApp(manager: Manager) {
     const body = z
       .object({ prompt: z.string().trim().min(3).max(6000), mode: z.enum(['demo', 'live']) })
       .parse(req.body)
-    res.status(201).json(manager.create(body.prompt, body.mode))
+    res.status(201).json(manager.create(body.prompt, body.mode, body.mode === 'live'))
   })
   app.get('/api/runs/:id', (req, res) => res.json(manager.get(req.params.id)))
-  app.post('/api/runs/:id/start', async (req, res) => {
-    const { constraints } = z
-      .object({ constraints: z.array(z.string().trim().min(1).max(2000)).min(1).max(8) })
+  app.post('/api/runs/:id/grill', async (req, res) => {
+    const input = z
+      .object({
+        round: z.number().int().min(0).max(5),
+        answer: z.string().trim().min(1).max(4000).optional(),
+      })
       .parse(req.body)
-    res.json(await manager.start(req.params.id, constraints))
+    res.json(await manager.advanceGrill(req.params.id, input))
+  })
+  app.delete('/api/runs/:id', async (req, res) => {
+    await manager.delete(req.params.id)
+    res.json({ deleted: true })
+  })
+  app.post('/api/runs/:id/start', async (req, res) => {
+    const { constraints, confirmation } = z
+      .object({
+        constraints: z.array(z.string().trim().min(1).max(2000)).min(1).max(24),
+        confirmation: z
+          .object({
+            confirmed: z.boolean(),
+            acceptedAssumptions: z.boolean(),
+            unresolved: z
+              .array(z.object({ item: z.string().max(2000), answer: z.string().max(2000) }))
+              .max(8),
+          })
+          .optional(),
+      })
+      .parse(req.body)
+    res.json(await manager.start(req.params.id, constraints, undefined, confirmation))
+  })
+  app.post('/api/runs/:id/resume', async (req, res) => {
+    const input = z
+      .object({ requestId: z.string().uuid(), revision: z.number().int().positive() })
+      .parse(req.body)
+    res.json(await manager.resume(req.params.id, input))
   })
   app.post('/api/runs/:id/verdict', (req, res) =>
     res.json(manager.runtime(req.params.id).verdict(verdictSchema.parse(req.body))),

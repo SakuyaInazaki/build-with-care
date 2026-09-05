@@ -168,3 +168,67 @@ it('rejects stale updates, invalid replacements and a second executing task with
   expect(state.interventions).toHaveLength(count)
   expect(state.status).toBe('completed')
 })
+
+it('resumes an interrupted task without adding requirements, changing versions or replaying old writes', async () => {
+  const { manager, state, dir } = await pendingDemo()
+  await manager.dispose()
+  state.status = 'running'
+  manager.store.save(state)
+  const restored = new Manager(dir, manager.settings)
+  try {
+    const next = restored.get(state.id)
+    expect(next.status).toBe('interrupted')
+    const constraints = structuredClone(next.constraints)
+    const interventions = structuredClone(next.interventions)
+    const revision = next.revision
+    const previousSteps = structuredClone(next.steps)
+    const input = { requestId: randomUUID(), revision }
+    await restored.resume(next.id, input)
+    await until(() => next.status === 'completed' || next.status === 'error')
+    expect(next.error).toBeUndefined()
+    expect(next.constraints).toEqual(constraints)
+    expect(next.interventions).toEqual(interventions)
+    expect(next.revision).toBe(revision)
+    expect(next.steps.slice(0, previousSteps.length)).toEqual(previousSteps)
+    expect(next.steps.slice(previousSteps.length).some((s) => s.tool === 'write_file')).toBe(false)
+    expect(next.gates.some((g) => g.status === 'pending')).toBe(false)
+    const eventCount = next.lastEventSeq
+    await restored.resume(next.id, input)
+    expect(next.lastEventSeq).toBe(eventCount)
+    expect(
+      restored.store.events(next.id).filter((e) => e.type === 'run.resume-requested'),
+    ).toHaveLength(1)
+    await expect(restored.resume(next.id, { ...input, requestId: randomUUID() })).rejects.toThrow(
+      '无需恢复',
+    )
+  } finally {
+    await restored.dispose()
+  }
+})
+
+it('rejects continuation-only text as a requirement and stale or concurrent resume commands', async () => {
+  const { manager, state } = await pendingDemo()
+  const constraints = structuredClone(state.constraints)
+  await expect(
+    manager.addInput(state.id, {
+      requestId: randomUUID(),
+      revision: state.revision,
+      kind: 'requirement',
+      text: '继续实现',
+    }),
+  ).rejects.toThrow('继续任务')
+  expect(state.constraints).toEqual(constraints)
+  const input = { requestId: randomUUID(), revision: state.revision }
+  await expect(manager.resume(state.id, input)).rejects.toThrow('无需恢复')
+  await manager.runtime(state.id).dispose()
+  await expect(
+    manager.resume(state.id, { ...input, revision: state.revision + 1 }),
+  ).rejects.toThrow('要求已更新')
+  const other = manager.create(DEMO_PROMPT, 'demo')
+  await manager.start(
+    other.id,
+    other.constraints.map((c) => c.text),
+  )
+  await expect(manager.resume(state.id, input)).rejects.toThrow('另一个任务')
+  expect(manager.store.events(state.id).some((e) => e.type === 'run.resume-requested')).toBe(false)
+})

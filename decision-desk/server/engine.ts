@@ -71,6 +71,7 @@ export function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<
 export interface RuntimeOptions {
   reviewer?: Reviewer
   adapter?: (onRequest: (o: GenerateOptions) => void) => LlmAdapter
+  continuation?: boolean
 }
 export class DecisionRuntime {
   readonly workspace: Workspace
@@ -235,8 +236,8 @@ export class DecisionRuntime {
               type: 'text',
               text:
                 this.state.prompt +
-                (this.state.steps.length
-                  ? '\n这是人明确追加后的继续执行。先读取现有文件，保留已经完成的部分。已完成的历史动作不需要重演。当前文件：' +
+                (this.options.continuation || this.state.steps.length
+                  ? '\n这是人明确要求的继续执行。沿用当前有效要求，先读取现有文件，保留已经完成的部分。已完成的历史动作不需要重演，已取消的旧调用不得直接放行。当前文件：' +
                     JSON.stringify(this.workspace.list())
                   : '') +
                 '\n' +
@@ -489,17 +490,13 @@ export class DecisionRuntime {
           this.commit('tool.cancelled', { stepId: step.id })
           return { kind: 'deny', reason: '审查已取消' }
         }
-        review = {
-          classification: 'uncertain',
-          title: '这一步需要人工核对',
-          summary: error instanceof Error ? error.message : '审查未完成',
-          impact: '在确认前，这次文件操作保持暂停。',
-          constraintIds: [],
-          evidence: String(step.args.intent ?? step.args.path ?? exec.name),
-          options: [],
-          topic: 'review-failure',
-          source: 'system',
-        }
+        const reason = error instanceof Error ? error.message : '审查未完成'
+        const message = /timeout|超时|响应超过/i.test(reason)
+          ? '审查服务超时，本次动作未执行。'
+          : `审查未完成，本次动作未执行：${reason}`
+        this.commit('review.failed', { stepId: step.id, message })
+        this.fail(new Error(message))
+        return { kind: 'deny', reason: message }
       }
       if (this.stopRequested || exec.signal.aborted) {
         step.status = 'cancelled'
