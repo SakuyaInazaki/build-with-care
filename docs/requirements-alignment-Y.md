@@ -36,7 +36,7 @@
 
 ### D5-R ·（修订，2026-09-04 晚）技术路线改为：给 dsh 写决策流插件
 
-- **决策**：底座从 Claude Agent SDK 自建壳改为 **DeepSeek Harness (dsh) 插件**，锁死版本（0.1.3-alpha.1）赛期内不升级。拦截走 `tools/pre-execute`（全参 + deny 附理由 + 无限挂起 + fail-closed），注入走 `agent.inject()`（原生只向前生效），叫停走 `agent.cancel()`，UI 用自带 Web UI + Slots 加卡片/时间线面板（抄现成 `ui-approval` 插件形态）。
+- **决策**：底座从 Claude Agent SDK 自建壳改为 **DeepSeek Harness (dsh) 插件**，锁死本机可验证的 `0.1.3-alpha.1` / commit `d347e70390`，赛期内不升级。拦截走 `tools/pre-execute`（全参 + deny 附理由 + 无限挂起 + fail-closed），注入走 `agent.inject()`（原生只向前生效），叫停走 `agent.cancel()`，UI 用自带 Web UI + Slots 加卡片/时间线面板（抄现成 `ui-approval` 插件形态）。
 - **理由**：源码级核查（见 <docs/research-dsh-Y.md>）确认四个核心需求全部有原生口子，且**免掉路线 B 最大工作量（自建界面）**；无 Claude hooks 的超时放行隐患；路演叙事加成（"给 95k star 的 dsh 补上决策层"）。
 - **已知代价与对策**：Cordis 框架学习成本（有 cookbook permission-gate 示例可抄）；alpha 破坏性变更（锁版本）；不能改写工具入参（翻案本就走 deny+注入，无碍）；自定义事件桥浏览器要走已桥接 waterfall 或自建路由（调研已给路径）。
 - **原 D5（SDK 自建壳）保留在上方作决策轨迹**；降级链变为：dsh 插件 → 路线 A（CLI hooks + 简易审批服务）。

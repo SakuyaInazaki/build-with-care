@@ -88,7 +88,7 @@ npm start
 | `agent.cancel()` | 契约 + Mock smoke | abort pending/running 语义；pending gate 必须收敛 |
 | session / turn / step / fork events | 事件映射 + Mock smoke | fork 只接受已完成 turn boundary；父分支保留语义由 workspace/session adapter 承担 |
 | unknown dsh events | 事件映射 + 测试 | 归一化为 `adapter-event`，保留 `externalType`、`provider`、`version` 和原 payload |
-| dsh 真实运行时 | 未实现 | 目标 `0.1.3-alpha.1` 在 npm registry 不存在；当前可见版本不能冒充目标锁定版本 |
+| dsh 真实运行时 | 未实现于主仓库 | 外部 checkout 的 `0.1.3-alpha.1` / `d347e70390` 已由插件真实复核；主仓库仍不把它作为必装依赖 |
 | workspace 文件快照 | 未实现 | fork/文件恢复需要注入 `WorkspaceSnapshotAdapter`；dsh session fork 不等于磁盘回滚 |
 | 外部副作用 | 仅记录限制 | 邮件、网络请求、已运行命令等不可由 fork 回滚 |
 | 异源 recorder/model | 未实现 | 需要独立 provider adapter 与准确率实测，不由 deterministic fallback 冒充 |

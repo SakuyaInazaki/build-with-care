@@ -42,9 +42,44 @@ describe('HTTP contract and isolation', () => {
     const address = app.server.address(); const base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`
     const created = await (await post(`${base}/api/sessions`, { mode: 'forward-only' })).json() as { sessionId: string }
     await post(`${base}/api/sessions/${created.sessionId}/spec`, spec)
-    expect((await post(`${base}/api/sessions/${created.sessionId}/demo`, {})).status).toBe(202)
+    expect((await post(`${base}/api/sessions/${created.sessionId}/demo`, { scenario: 'red-only' })).status).toBe(202)
     await new Promise((resolve) => setTimeout(resolve, 10))
     const state = await (await fetch(`${base}/api/sessions/${created.sessionId}/state`)).json() as { cards: Array<{ id: string }> }
     expect(state.cards[0]?.id).toBe('demo-red')
+  })
+
+  it('executes work units, records forward-only constraints, and freezes writes after end', async () => {
+    const app = createDecisionServer({ dataRoot: mkdtempSync(join(tmpdir(), 'decision-http-')) }); apps.push(app)
+    await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', () => resolve()))
+    const address = app.server.address(); const base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`
+    const created = await (await post(`${base}/api/sessions`, {})).json() as { sessionId: string }
+    expect((await post(`${base}/api/sessions/${created.sessionId}/spec`, { id: 's', request: '数据库', constraints: ['必须使用 Postgres'], confirmed: true })).status).toBe(200)
+    expect((await post(`${base}/api/sessions/${created.sessionId}/units`, { id: 'u1', goal: '检查 schema', decisions: [], toolCalls: [{ tool: 'validate', kind: 'validate', description: '检查 schema', args: { target: 'schema.sql' } }] })).status).toBe(202)
+    expect((await post(`${base}/api/sessions/${created.sessionId}/constraints`, { text: '后续不允许 SQLite' })).status).toBe(200)
+    const constraints = await (await fetch(`${base}/api/sessions/${created.sessionId}/constraints`)).json() as Array<{ affectsFromTurn?: number }>
+    expect(constraints.some((item) => item.affectsFromTurn !== undefined)).toBe(true)
+    expect((await post(`${base}/api/sessions/${created.sessionId}/end`, {})).status).toBe(200)
+    const ended = await post(`${base}/api/sessions/${created.sessionId}/constraints`, { text: '之后不允许 MySQL' })
+    expect(ended.status).toBe(409)
+  })
+
+  it('keeps dsh admission separate from execution and records post/result through adapter-events', async () => {
+    const app = createDecisionServer({ dataRoot: mkdtempSync(join(tmpdir(), 'decision-http-')) }); apps.push(app)
+    await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', () => resolve()))
+    const address = app.server.address(); const base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`
+    const created = await (await post(`${base}/api/sessions`, {})).json() as { sessionId: string }
+    expect((await post(`${base}/api/sessions/${created.sessionId}/spec`, { ...spec, id: 'dsh' })).status).toBe(200)
+    const first = { tool: 'write', kind: 'write', description: 'dsh writes a file', args: { source: 'dsh', callId: 'c1', path: 'dsh.txt', arguments: { path: 'dsh.txt' } }, agentId: 'dsh-agent' }
+    expect((await post(`${base}/api/sessions/${created.sessionId}/units`, { id: 'dsh-unit', goal: 'external dsh step', decisions: [], toolCalls: [first] })).status).toBe(202)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    let state = await (await fetch(`${base}/api/sessions/${created.sessionId}/state`)).json() as { cards: Array<{ id: string; executionStatus: string }>; timeline: Array<{ type: string }> }
+    expect(state.cards.find((card) => card.id === 'dsh-unit')?.executionStatus).toBe('running')
+    expect(state.timeline.some((event) => event.type === 'tool-result')).toBe(false)
+    expect((await post(`${base}/api/sessions/${created.sessionId}/actions`, { ...first, id: 'dsh-call-2', args: { ...first.args, unitId: 'dsh-unit', callId: 'c2' } })).status).toBe(202)
+    expect((await post(`${base}/api/sessions/${created.sessionId}/adapter-events`, { type: 'tool-result', payload: { unitId: 'dsh-unit', callId: 'c1', tool: 'write', ok: true, output: { written: true } } })).status).toBe(202)
+    expect((await post(`${base}/api/sessions/${created.sessionId}/adapter-events`, { type: 'tool-result', payload: { unitId: 'dsh-unit', callId: 'c2', tool: 'write', ok: true, output: { written: true }, evidence: { kind: 'check', detail: 'dsh verified', passed: true } } })).status).toBe(202)
+    state = await (await fetch(`${base}/api/sessions/${created.sessionId}/state`)).json() as { cards: Array<{ id: string; state: string; executionStatus: string }>; timeline: Array<{ type: string }> }
+    expect(state.cards.find((card) => card.id === 'dsh-unit')).toMatchObject({ state: 'verified', executionStatus: 'succeeded' })
+    expect(state.timeline.filter((event) => event.type === 'tool-result')).toHaveLength(2)
   })
 })

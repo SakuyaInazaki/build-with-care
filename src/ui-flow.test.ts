@@ -3,7 +3,7 @@ import { demoPlan, groupTimelineByStep } from './ui-flow.js'
 
 describe('demo UI flow', () => {
   it('keeps both correction modes explicit in the complete sequence', () => {
-    expect(demoPlan('forward-only').map((item) => item.stage)).toEqual(['blue', 'red', 'correction', 'tool', 'evidence', 'complete'])
+    expect(demoPlan('forward-only').map((item) => item.stage)).toEqual(['blue', 'red', 'correction', 'tool', 'evidence', 'runtime-failure', 'complete'])
     expect(demoPlan('rewind-and-fork')[2]?.action).toContain('fork')
   })
 
