@@ -60,6 +60,51 @@ const fixture = (): RunState => ({
 })
 
 describe('evidence and state lanes', () => {
+  it('links current file checks to completed units including ordinary decision cards, without treating approval as proof', () => {
+    const run = fixture()
+    run.steps[0].unitId = 'old-unit'
+    run.steps[1].unitId = 'new-unit'
+    run.workUnits = [{ id: 'old-unit', goal: '骨架', status: 'completed', decisions: [], plan: [], nextCall: 0, stepIds: ['write'], revision: 1, createdAt: at }]
+    run.decisions = [{ id: 'decision', unitId: 'old-unit', stepIds: ['write'], review, revision: 1, createdAt: at, humanStatus: 'unreviewed', executionStatus: 'done' }]
+    let card = boardItems(run).find(card => card.id === 'decision')!
+    expect(card.lane).toBe('verified')
+    expect(card.decision?.humanStatus).toBe('unreviewed')
+    expect(card.checks[0].stepId).toBe('check')
+    run.files[0].hash = 'changed'
+    card = boardItems(run).find(card => card.id === 'decision')!
+    expect(card.lane).toBe('validation')
+    expect(card.checks[0].stale).toBe(true)
+    run.files[0].hash = 'hash-1'
+    run.verifications[0].revision = 0
+    expect(boardItems(run).find(card => card.id === 'decision')?.lane).toBe('validation')
+  })
+  it('groups a completed work unit into one card without claiming untested work is verified', () => {
+    const run = fixture()
+    run.steps = ['begin', 'write', 'end'].map((id) => ({
+      ...step(id, id === 'write' ? 'write_file' : `${id}_unit`),
+      unitId: 'unit',
+    }))
+    run.workUnits = [
+      {
+        id: 'unit',
+        goal: '完成课程编辑',
+        decisions: [],
+        plan: [{ tool: 'write_file', path: 'index.html' }],
+        nextCall: 1,
+        stepIds: run.steps.map((s) => s.id),
+        revision: 1,
+        status: 'completed',
+        createdAt: at,
+        summary: '已写入课程编辑页面',
+      },
+    ]
+    const cards = boardItems(run)
+    expect(cards).toHaveLength(1)
+    expect(cards[0].title).toBe('完成课程编辑')
+    expect(cards[0].steps).toHaveLength(3)
+    expect(cards[0].lane).toBe('validation')
+    expect(cards[0].tone).toBe('neutral')
+  })
   it('never treats execution or human acknowledgement as verification', () => {
     const run = fixture()
     run.decisions = [

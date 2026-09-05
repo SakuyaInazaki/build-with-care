@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from 'vitest'
-import { createDecisionServer } from './server.js'
+import { createDecisionServer } from './reference-server.js'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

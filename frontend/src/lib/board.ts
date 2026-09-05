@@ -65,6 +65,7 @@ export function currentChecks(run: RunState) {
     ...check,
     stale:
       check.stale ||
+      (check.revision !== undefined && check.revision !== run.revision) ||
       !run.files.some((file) => file.path === check.path && file.hash === check.artifactHash) ||
       !run.steps.some(
         (step) =>
@@ -84,10 +85,26 @@ function boundChecks(run: RunState, stepIds: string[]) {
       ),
   )
 }
+function unitChecks(run: RunState, steps: Step[]) {
+  const paths = new Set(
+    steps
+      .filter((step) => step.status === 'done')
+      .flatMap((step) => [
+        ...(['write_file', 'edit_file', 'verify_app'].includes(step.tool) && typeof step.args.path === 'string'
+          ? [step.args.path]
+          : []),
+        ...(step.tool === 'run_command' ? (step.artifactPaths ?? []) : []),
+      ]),
+  )
+  return { paths, checks: currentChecks(run).filter(check => paths.has(check.path)) }
+}
 export function boardItems(run: RunState): BoardItem[] {
   const items: BoardItem[] = []
   for (const decision of run.decisions) {
-    const allSteps = run.steps.filter((step) => decision.stepIds.includes(step.id))
+    const unit = run.workUnits?.find((unit) => unit.id === decision.unitId)
+    const allSteps = run.steps.filter((step) =>
+      unit ? step.unitId === unit.id : decision.stepIds.includes(step.id),
+    )
     if (decision.review.source === 'system' && decision.review.topic === 'review-failure') {
       items.push({
         id: decision.id,
@@ -116,6 +133,7 @@ export function boardItems(run: RunState): BoardItem[] {
         .filter((step) => correction?.subsequentStepIds.includes(step.id))
         .map((step) => step.args.path),
     )
+    const coverage = unit ? unitChecks(run, allSteps) : undefined
     const checks =
       correction?.progress === 'verified'
         ? boundChecks(
@@ -129,16 +147,22 @@ export function boardItems(run: RunState): BoardItem[] {
               )
               .map((step) => step.id),
           )
-        : []
-    const verified = checks.length > 0 && checks.every((check) => check.passed && !check.stale)
+        : !correction && unit &&
+            (['execution', 'choice'].includes(decision.review.classification) ||
+              decision.humanStatus === 'allowed-once')
+          ? coverage!.checks
+          : []
+    const verified = checks.length > 0 && checks.every((check) => check.passed && !check.stale) &&
+      (correction || (unit?.status === 'completed' && [...coverage!.paths].every(path => checks.some(check => check.path === path))))
     for (const gate of pendingGates.length ? pendingGates : [undefined]) {
       const steps = gate ? allSteps.filter((step) => step.id === gate.stepId) : allSteps
       const moving = steps.some((step) => ['reviewing', 'executing'].includes(step.status))
       const closed =
         isReadOnly(run) ||
         (!correction &&
-          steps.length > 0 &&
-          steps.every((step) => ['cancelled', 'denied', 'failed'].includes(step.status)))
+          (unit?.status === 'cancelled' ||
+            (steps.length > 0 &&
+              steps.every((step) => ['cancelled', 'denied', 'failed'].includes(step.status)))))
       const lane: Lane = gate
         ? 'attention'
         : verified
@@ -153,8 +177,8 @@ export function boardItems(run: RunState): BoardItem[] {
               : 'validation'
       items.push({
         id: gate?.id ?? decision.id,
-        title: verified ? '纠正已通过对应检查' : decision.review.title,
-        summary: verified
+        title: verified && correction ? '纠正已通过对应检查' : (unit?.goal ?? decision.review.title),
+        summary: verified && correction
           ? `原问题：${decision.review.title}。后续改动的 ${checks.length} 项当前检查通过。`
           : decision.review.summary,
         decision,
@@ -172,7 +196,10 @@ export function boardItems(run: RunState): BoardItem[] {
     }
   }
   for (const step of run.steps.filter(
-    (entry) => !entry.decisionId && !['read_file', 'list_files'].includes(entry.tool),
+    (entry) =>
+      !entry.unitId &&
+      !entry.decisionId &&
+      !['read_file', 'list_files', 'begin_unit', 'end_unit'].includes(entry.tool),
   )) {
     const checks = boundChecks(run, [step.id])
     const verified = checks.length > 0 && checks.every((check) => check.passed && !check.stale)
@@ -196,6 +223,42 @@ export function boardItems(run: RunState): BoardItem[] {
       lane,
       checks,
       tone: verified ? 'green' : 'neutral',
+    })
+  }
+  for (const unit of run.workUnits ?? []) {
+    if (run.decisions.some((decision) => decision.unitId === unit.id)) continue
+    const steps = run.steps.filter((step) => step.unitId === unit.id)
+    const completedReadOnly =
+      unit.status === 'completed' &&
+      steps.every((step) =>
+        ['begin_unit', 'end_unit', 'list_files', 'read_file'].includes(step.tool),
+      )
+    if (completedReadOnly) continue
+    const { checks } = unitChecks(run, steps)
+    const paths = steps
+      .filter((step) => ['write_file', 'edit_file'].includes(step.tool) && step.status === 'done')
+      .map((step) => step.args.path)
+    const verified =
+      unit.status === 'completed' &&
+      checks.length > 0 &&
+      checks.every((check) => check.passed && !check.stale) &&
+      paths.every((path) => checks.some((check) => check.path === path))
+    const lane: Lane =
+      unit.status === 'cancelled'
+        ? 'closed'
+        : verified
+          ? 'verified'
+          : unit.status === 'completed'
+            ? 'validation'
+            : 'active'
+    items.push({
+      id: unit.id,
+      title: unit.goal,
+      summary: unit.summary ?? '',
+      steps,
+      lane,
+      tone: verified ? 'green' : 'neutral',
+      checks,
     })
   }
   return items

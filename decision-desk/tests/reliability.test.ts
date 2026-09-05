@@ -5,6 +5,9 @@ import path from 'node:path'
 import { DEMO_PROMPT, type Review } from '../shared/types.js'
 import { demoReview } from '../server/reviewer.js'
 import { Store } from '../server/store.js'
+import { Manager } from '../server/manager.js'
+import { LlmAdapter, type GenerateOptions } from '@deepseek-ai/dsh-llm'
+import { responseChunks } from '../server/models.js'
 import { Workspace, inspectHtml } from '../server/workspace.js'
 import { fixture, until } from './helpers.js'
 
@@ -30,28 +33,338 @@ const execution: Review = {
 }
 
 describe('pending operations and evidence', () => {
-  it('keeps a review timeout as a retryable execution error, without creating a human decision or gate', async () => {
+  it.each([
+    { oldText: 'missing', file: 'index.html', error: '匹配 0 次' },
+    { oldText: 'same', file: 'index.html', error: '匹配 2 次' },
+    { oldText: '', file: 'index.html', error: 'oldText 不能为空' },
+    { oldText: 'same', file: 'missing.html', error: 'ENOENT' },
+  ])(
+    'returns invalid edit $error to the worker for repair without review retry',
+    async ({ oldText, file, error }) => {
+      const { manager } = setup(),
+        state = manager.create(DEMO_PROMPT, 'demo')
+      const workspace = new Workspace(path.join(manager.store.directory(state.id), 'workspace'))
+      const original = '<p>same</p><b>same</b>'
+      workspace.write('index.html', original)
+      const replacement = "<p>$& $$ $` $' repaired</p>"
+      let requests = 0
+      const reviewed: string[] = []
+      await manager.start(
+        state.id,
+        state.constraints.map((c) => c.text),
+        {
+          reviewer: async (_run, tool, args) => {
+            reviewed.push(tool)
+            if (tool === 'edit_file') expect(args.content).toBe(replacement + '<b>same</b>')
+            return execution
+          },
+          adapter: (onRequest) =>
+            new (class extends LlmAdapter {
+              async *stream(options: GenerateOptions) {
+                onRequest(options)
+                requests++
+                if (requests === 2) {
+                  expect(JSON.stringify(options.messages)).toContain(error)
+                  expect(workspace.read('index.html')).toBe(original)
+                  expect(reviewed).toEqual([])
+                  expect(state.reviewFailure).toBeUndefined()
+                }
+                const call =
+                  requests === 1
+                    ? {
+                        name: 'edit_file',
+                        arguments: { path: file, oldText, newText: 'wrong', intent: 'edit' },
+                      }
+                    : requests === 2
+                      ? { name: 'read_file', arguments: { path: 'index.html' } }
+                      : {
+                          name: 'edit_file',
+                          arguments: {
+                            path: 'index.html',
+                            oldText: '<p>same</p>',
+                            newText: replacement,
+                            intent: 'repair',
+                          },
+                        }
+                yield* responseChunks({
+                  content: '',
+                  calls:
+                    requests <= 3
+                      ? [
+                          {
+                            id: randomUUID(),
+                            name: call.name,
+                            arguments: JSON.stringify(call.arguments),
+                          },
+                        ]
+                      : [],
+                  finishReason: requests <= 3 ? 'tool_calls' : 'stop',
+                })
+              }
+            })(),
+        },
+      )
+      await until(() => state.status === 'completed')
+      expect(state.steps.map((s) => s.status)).toEqual(['failed', 'done', 'done'])
+      expect(workspace.read('index.html')).toBe(replacement + '<b>same</b>')
+      expect(reviewed).toEqual(['read_file', 'edit_file'])
+      expect(state.reviewFailure).toBeUndefined()
+      expect(state.gates).toHaveLength(0)
+      expect(state.decisions).toHaveLength(0)
+      expect(state.revision).toBe(1)
+      expect(manager.store.events(state.id).some((e) => e.type === 'review.failed')).toBe(false)
+    },
+  )
+
+  it('returns a stale recovered edit to the worker without retrying the reviewer', async () => {
+    const f = setup(),
+      original = f.manager.create(DEMO_PROMPT, 'demo')
+    const workspace = new Workspace(path.join(f.manager.store.directory(original.id), 'workspace'))
+    workspace.write('index.html', 'before')
+    await f.manager.start(
+      original.id,
+      original.constraints.map((c) => c.text),
+      {
+        reviewer: async () => {
+          throw new Error('连接中断')
+        },
+        adapter: (onRequest) =>
+          new (class extends LlmAdapter {
+            async *stream(options: GenerateOptions) {
+              onRequest(options)
+              yield* responseChunks({
+                content: '',
+                calls: [
+                  {
+                    id: randomUUID(),
+                    name: 'edit_file',
+                    arguments: JSON.stringify({
+                      path: 'index.html',
+                      oldText: 'before',
+                      newText: 'after',
+                      intent: 'edit',
+                    }),
+                  },
+                ],
+                finishReason: 'tool_calls',
+              })
+            }
+          })(),
+      },
+    )
+    await until(() => !!original.reviewFailure)
+    const pending = structuredClone(original.steps[0])
+    await f.manager.dispose()
+    workspace.write('index.html', 'changed in the meantime')
+    const manager = new Manager(f.dir, f.manager.settings)
+    try {
+      const state = manager.get(original.id),
+        constraints = structuredClone(state.constraints)
+      let reviews = 0,
+        requests = 0
+      await manager.resume(
+        state.id,
+        { requestId: randomUUID(), revision: state.revision },
+        {
+          reviewer: async () => {
+            reviews++
+            return execution
+          },
+          adapter: (onRequest) =>
+            new (class extends LlmAdapter {
+              async *stream(options: GenerateOptions) {
+                onRequest(options)
+                requests++
+                expect(JSON.stringify(options.messages)).toContain('匹配 0 次')
+                yield* responseChunks({
+                  content: '已收到编辑错误，将依据最新文件修正',
+                  calls: [],
+                  finishReason: 'stop',
+                })
+              }
+            })(),
+        },
+      )
+      await until(() => state.status === 'completed')
+      expect(reviews).toBe(0)
+      expect(requests).toBe(1)
+      expect(state.steps[0].id).toBe(pending.id)
+      expect(state.steps[0].args).toEqual(pending.args)
+      expect(state.steps[0].status).toBe('failed')
+      expect(state.reviewFailure).toBeUndefined()
+      expect(state.constraints).toEqual(constraints)
+      expect(workspace.read('index.html')).toBe('changed in the meantime')
+    } finally {
+      await manager.dispose()
+    }
+  })
+
+  it('keeps a slow review alive past the threshold without releasing the action', async () => {
     const { manager } = setup({ reviewTimeoutMs: 30 }),
+      state = manager.create(DEMO_PROMPT, 'demo')
+    let release!: (review: Review) => void
+    const review = new Promise<Review>((resolve) => {
+      release = resolve
+    })
+    await manager.start(
+      state.id,
+      state.constraints.map((c) => c.text),
+      { reviewer: () => review },
+    )
+    await until(() => state.modelProgress?.phase === 'review-slow')
+    expect(state.status).toBe('running')
+    expect(state.files).toHaveLength(0)
+    expect(state.decisions).toHaveLength(0)
+    expect(state.gates).toHaveLength(0)
+    release(execution)
+    await until(() => state.status === 'completed')
+    expect(state.files.length).toBeGreaterThan(0)
+    expect(state.modelProgress).toBeUndefined()
+  })
+
+  it('retries a failed review in place with unchanged arguments and no additional requirement', async () => {
+    const { manager } = setup(),
+      state = manager.create(DEMO_PROMPT, 'demo')
+    let calls = 0
+    await manager.start(
+      state.id,
+      state.constraints.map((c) => c.text),
+      {
+        reviewer: async () => {
+          if (++calls === 1) throw new Error('连接中断')
+          return execution
+        },
+      },
+    )
+    await until(() => !!state.reviewFailure)
+    const firstStep = structuredClone(state.steps[0])
+    const constraints = structuredClone(state.constraints)
+    const revision = state.revision
+    const runtime = manager.runtime(state.id)
+    expect(state.status).toBe('running')
+    expect(state.gates).toHaveLength(0)
+    expect(state.files).toHaveLength(0)
+    expect(manager.store.events(state.id).filter((e) => e.type === 'model.request')).toHaveLength(1)
+    const input = { requestId: randomUUID(), revision, stepId: firstStep.id }
+    expect(() =>
+      runtime.retryReview({ ...input, revision: revision + 1 }, manager.settings),
+    ).toThrow('要求已更新')
+    runtime.retryReview(input, manager.settings)
+    runtime.retryReview(input, manager.settings)
+    await until(() => state.status === 'completed')
+    expect(state.steps.filter((s) => s.id === firstStep.id)).toHaveLength(1)
+    expect(state.steps[0].args).toEqual(firstStep.args)
+    expect(state.steps[0].status).toBe('done')
+    expect(state.constraints).toEqual(constraints)
+    expect(state.revision).toBe(revision)
+    expect(state.reviewFailure).toBeUndefined()
+    expect(
+      manager.store.events(state.id).filter((e) => e.type === 'review.retry-requested'),
+    ).toHaveLength(1)
+  })
+
+  it('stops immediately while awaiting a failed review retry', async () => {
+    const { manager } = setup(),
       state = manager.create(DEMO_PROMPT, 'demo')
     await manager.start(
       state.id,
       state.constraints.map((c) => c.text),
-      { reviewer: () => new Promise(() => {}) },
+      {
+        reviewer: async () => {
+          throw new Error('连接中断')
+        },
+      },
     )
-    await until(() => state.status === 'error')
-    expect(state.error).toBe('审查服务超时，本次动作未执行。')
+    await until(() => !!state.reviewFailure)
+    manager.runtime(state.id).requestStop()
+    await until(() => state.status === 'stopped', 1500)
     expect(state.files).toHaveLength(0)
-    expect(state.decisions).toHaveLength(0)
-    expect(state.gates).toHaveLength(0)
-    expect(manager.store.events(state.id).some((event) => event.type === 'review.failed')).toBe(
-      true,
+    expect(state.reviewFailure).toBeUndefined()
+    expect(state.steps[0].status).toBe('cancelled')
+  })
+
+  it('rechecks the identical unexecuted action after a service restart before requesting the worker', async () => {
+    const f = setup(),
+      original = f.manager.create(DEMO_PROMPT, 'demo')
+    await f.manager.start(
+      original.id,
+      original.constraints.map((c) => c.text),
+      {
+        reviewer: async () => {
+          throw new Error('证据格式不完整')
+        },
+      },
     )
-    const constraints = structuredClone(state.constraints)
-    const revision = state.revision
-    await manager.resume(state.id, { requestId: randomUUID(), revision })
-    await until(() => ['completed', 'waiting'].includes(state.status))
-    expect(state.constraints).toEqual(constraints)
-    expect(state.revision).toBe(revision)
+    await until(() => !!original.reviewFailure)
+    const pending = structuredClone(original.steps[0])
+    await f.manager.dispose()
+    const manager = new Manager(f.dir, f.manager.settings)
+    try {
+      const state = manager.get(original.id)
+      const before = state.lastEventSeq
+      let release!: (review: Review) => void
+      const reviewing = new Promise<Review>((resolve) => {
+        release = resolve
+      })
+      let workerRequests = 0
+      await manager.resume(
+        state.id,
+        { requestId: randomUUID(), revision: state.revision },
+        {
+          reviewer: async (_run, tool, args) => {
+            expect(tool).toBe(pending.tool)
+            expect(args).toEqual(pending.args)
+            return reviewing
+          },
+          adapter: (onRequest) =>
+            new (class extends LlmAdapter {
+              async *stream(options: GenerateOptions) {
+                workerRequests++
+                onRequest(options)
+                yield* responseChunks({
+                  content: '继续核验现有成果',
+                  calls: [],
+                  finishReason: 'stop',
+                })
+              }
+            })(),
+        },
+      )
+      await until(() => state.steps[0].status === 'reviewing')
+      expect(workerRequests).toBe(0)
+      expect(state.files).toHaveLength(0)
+      expect(state.steps).toHaveLength(1)
+      expect(state.steps[0].id).toBe(pending.id)
+      release({
+        ...execution,
+        classification: 'conflict',
+        constraintIds: [state.constraints[0].id],
+        evidence: '拟写入代码与要求冲突',
+      })
+      await until(() => state.status === 'waiting')
+      expect(state.files).toHaveLength(0)
+      expect(workerRequests).toBe(0)
+      const gate = state.gates.at(-1)!
+      manager.runtime(state.id).verdict({
+        requestId: randomUUID(),
+        revision: state.revision,
+        decisionId: gate.decisionId,
+        gateId: gate.id,
+        action: 'allow-once',
+      })
+      await until(() => state.status === 'completed')
+      expect(state.steps[0].status).toBe('done')
+      expect(state.steps[0].args).toEqual(pending.args)
+      expect(workerRequests).toBe(1)
+      const events = manager.store.events(state.id, before)
+      expect(events.findIndex((e) => e.type === 'tool.finished')).toBeLessThan(
+        events.findIndex((e) => e.type === 'model.request'),
+      )
+      expect(state.constraints).toEqual(original.constraints)
+      expect(state.revision).toBe(original.revision)
+    } finally {
+      await manager.dispose()
+    }
   })
 
   it('cancels an in-flight uncooperative reviewer immediately', async () => {

@@ -7,15 +7,14 @@
     "dev": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
     "start": "npm --prefix frontend start",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "dev:legacy": "tsx src/server.ts",
-    "build:legacy": "tsc -p tsconfig.json && mkdir -p dist/public && cp -R src/public/. dist/public/",
-    "start:legacy": "node dist/server.js"
+    "typecheck": "npm --prefix decision-desk run check && npm --prefix frontend exec tsc -- --noEmit -p frontend/tsconfig.json",
+    "test": "npm --prefix decision-desk test && npm --prefix frontend test",
+    "test:reference": "vitest run",
+    "typecheck:reference": "tsc --noEmit"
   },
   "deepseekHarness": {
-    "version": "0.1.3-alpha.1",
-    "status": "optional-adapter-not-installed"
+    "version": "0.1.2-rc.1",
+    "status": "active-via-decision-desk"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

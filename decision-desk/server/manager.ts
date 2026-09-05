@@ -50,6 +50,7 @@ export class Manager {
     this.store = new Store(root)
     this.settingsStore = new SettingsStore(this.store.root)
     this.settings = this.settingsStore.load(settings)
+    this.store.setCredentialValues([this.settings.worker.apiKey, this.settings.reviewer.apiKey])
     for (const state of this.store.loadAll()) this.states.set(state.id, state)
     this.events.setMaxListeners(100)
   }
@@ -111,6 +112,7 @@ export class Manager {
     const settings = { ...this.settings, ...patch }
     this.settingsStore.save(settings)
     this.settings = settings
+    this.store.setCredentialValues([settings.worker.apiKey, settings.reviewer.apiKey])
     return this.publicSettings()
   }
   create(prompt: string, mode: Mode, withGrill = false): RunState {
@@ -148,6 +150,8 @@ export class Manager {
       reflection: '',
       lastEventSeq: 0,
       runtime: 'dsh 0.1.2-rc.1 · 串行工具执行',
+      workUnits: [],
+      workUnitProtocol: mode === 'live',
       workerLabel: mode === 'demo' ? '演示执行器' : this.settings.worker.model,
       reviewerLabel: mode === 'demo' ? '演示规则审查' : this.settings.reviewer.model,
       ...(withGrill ? { grill: emptyGrill() } : {}),
@@ -158,7 +162,7 @@ export class Manager {
     this.publish(state)
     return state
   }
-  async advanceGrill(id: string, input: { round: number; answer?: string }) {
+  async advanceGrill(id: string, input: { round: number; answer?: string; choices?: string[] }) {
     if (this.grilling.has(id)) throw new ConflictError('正在整理本轮回答，请稍候。')
     const state = this.get(id)
     if (state.mode !== 'live') throw new ConflictError('开发测试记录不调用需求模型。')
@@ -204,7 +208,7 @@ export class Manager {
       this.store,
       structuredClone(this.settings),
       this.publish,
-      options,
+      { ...options, currentSettings: () => this.settings },
     )
     this.runtimes.set(id, runtime)
     runtime.commit('constraints.confirmed', { constraints: state.constraints })
@@ -255,6 +259,7 @@ export class Manager {
         this.store,
         structuredClone(this.settings),
         this.publish,
+        { currentSettings: () => this.settings },
       )
       this.runtimes.set(id, runtime)
       state.error = undefined
@@ -297,6 +302,28 @@ export class Manager {
       throw new ConflictError('请先配置模型，再继续任务。')
     this.continuing.add(id)
     const previousStatus = state.status
+    const failure = this.store
+      .events(id)
+      .filter((event) => event.type === 'review.failed')
+      .at(-1)
+    const failedStep = state.steps.at(-1)
+    const reviewRecoveryStepId =
+      failure &&
+      failedStep &&
+      (failure.data as { stepId: string }).stepId === failedStep.id &&
+      ['write_file', 'edit_file'].includes(failedStep.tool) &&
+      ['cancelled', 'reviewing'].includes(failedStep.status) &&
+      !failedStep.decisionId &&
+      !failedStep.artifactChanged &&
+      !this.store
+        .events(id, failure.seq)
+        .some(
+          (event) =>
+            event.type === 'tool.allowed' &&
+            (event.data as { stepId: string }).stepId === failedStep.id,
+        )
+        ? failedStep.id
+        : undefined
     try {
       const disposing = this.runtimes.get(id)?.dispose()
       state.status = 'running'
@@ -306,7 +333,12 @@ export class Manager {
         this.store,
         structuredClone(this.settings),
         this.publish,
-        { ...options, continuation: true },
+        {
+          ...options,
+          continuation: true,
+          reviewRecoveryStepId,
+          currentSettings: () => this.settings,
+        },
       )
       this.runtimes.set(id, runtime)
       state.error = undefined
@@ -316,6 +348,35 @@ export class Manager {
     } finally {
       this.continuing.delete(id)
     }
+  }
+  verifyArtifacts(id: string, input: { requestId: string; revision: number }) {
+    const state = this.get(id)
+    if (
+      this.store
+        .events(id)
+        .some(
+          (event) =>
+            event.type === 'verification.refresh-completed' &&
+            (event.data as { requestId?: string }).requestId === input.requestId,
+        )
+    )
+      return state
+    if (input.revision !== state.revision) throw new ConflictError('要求已更新，请重新发起检查。')
+    if (
+      ['running', 'waiting', 'stopping', 'ready'].includes(state.status) ||
+      this.continuing.has(id) ||
+      this.grilling.has(id)
+    )
+      throw new ConflictError('任务运行中会在单元结束时自动检查，请等待当前执行结束。')
+    const runtime = new DecisionRuntime(
+      state,
+      this.store,
+      structuredClone(this.settings),
+      this.publish,
+    )
+    runtime.verifyArtifacts(state.files.map((file) => file.path))
+    runtime.commit('verification.refresh-completed', input)
+    return state
   }
   runtime(id: string) {
     this.get(id)

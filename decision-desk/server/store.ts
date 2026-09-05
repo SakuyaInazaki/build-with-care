@@ -1,7 +1,7 @@
 import {
-  appendFileSync,
   closeSync,
   existsSync,
+  fchmodSync,
   fsyncSync,
   mkdirSync,
   openSync,
@@ -14,9 +14,26 @@ import {
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { AppEvent, RunState } from '../shared/types.js'
+import { cancelUnits } from './work-units.js'
+
+const credentialFields = new Set([
+  'apikey',
+  'authorization',
+  'password',
+  'passwd',
+  'accesstoken',
+  'refreshtoken',
+  'sessiontoken',
+  'clientsecret',
+  'privatekey',
+  'cookie',
+  'setcookie',
+  'token',
+])
 
 export class Store {
   readonly root: string
+  private credentialValues = new Set<string>()
   constructor(root: string) {
     this.root = path.resolve(root)
     mkdirSync(this.root, { recursive: true })
@@ -27,6 +44,36 @@ export class Store {
     mkdirSync(dir, { recursive: true })
     return dir
   }
+  setCredentialValues(values: (string | undefined)[]) {
+    this.credentialValues = new Set(
+      values
+        .filter((value): value is string => !!value && value.length >= 8)
+        .sort((a, b) => b.length - a.length),
+    )
+  }
+  private redact(value: unknown, operational = false): unknown {
+    if (typeof value === 'string') {
+      if (operational) return value
+      let result = value
+      for (const credential of this.credentialValues)
+        result = result.replaceAll(credential, '[REDACTED]')
+      return result
+    }
+    if (Array.isArray(value)) return value.map((entry) => this.redact(entry, operational))
+    if (!value || typeof value !== 'object') return value
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => {
+        const normalized = key.toLowerCase().replace(/[^a-z]/g, '')
+        const isOperational =
+          operational || ['args', 'arguments', 'argumentsdelta'].includes(normalized)
+        const credentialField = credentialFields.has(normalized)
+        return [
+          key,
+          credentialField && !isOperational ? '[REDACTED]' : this.redact(entry, isOperational),
+        ]
+      }),
+    )
+  }
   append(state: RunState, type: string, data: unknown): AppEvent {
     const event: AppEvent = {
       id: randomUUID(),
@@ -34,11 +81,12 @@ export class Store {
       runId: state.id,
       type,
       at: new Date().toISOString(),
-      data,
+      data: this.redact(data),
     }
     // A verdict reaches durable storage before its pending tool can be released.
-    const fd = openSync(path.join(this.directory(state.id), 'events.jsonl'), 'a')
+    const fd = openSync(path.join(this.directory(state.id), 'events.jsonl'), 'a', 0o600)
     try {
+      fchmodSync(fd, 0o600)
       writeFileSync(fd, JSON.stringify(event) + '\n')
       fsyncSync(fd)
     } finally {
@@ -51,9 +99,10 @@ export class Store {
   save(state: RunState) {
     const dir = this.directory(state.id),
       tmp = path.join(dir, 'state.tmp')
-    const fd = openSync(tmp, 'w')
+    const fd = openSync(tmp, 'w', 0o600)
     try {
-      writeFileSync(fd, JSON.stringify(state, null, 2), 'utf8')
+      fchmodSync(fd, 0o600)
+      writeFileSync(fd, JSON.stringify(this.redact(state), null, 2), 'utf8')
       fsyncSync(fd)
     } finally {
       closeSync(fd)
@@ -61,7 +110,21 @@ export class Store {
     renameSync(tmp, path.join(dir, 'state.json'))
   }
   recordRaw(id: string, event: unknown) {
-    appendFileSync(path.join(this.directory(id), 'dsh-events.jsonl'), JSON.stringify(event) + '\n')
+    const fd = openSync(path.join(this.directory(id), 'dsh-events.jsonl'), 'a', 0o600)
+    try {
+      fchmodSync(fd, 0o600)
+      writeFileSync(fd, JSON.stringify(this.redact(event)) + '\n')
+    } finally {
+      closeSync(fd)
+    }
+  }
+  rawEvents(id: string): { type: string; seq: number; time: number; data: any }[] {
+    const file = path.join(this.directory(id), 'dsh-events.jsonl')
+    if (!existsSync(file)) return []
+    return readFileSync(file, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
   }
   delete(id: string) {
     const directory = this.directory(id)
@@ -74,6 +137,7 @@ export class Store {
     const appendAudit = (phase: string) => {
       const fd = openSync(audit, 'a')
       try {
+        fchmodSync(fd, 0o600)
         writeFileSync(
           fd,
           JSON.stringify({ operationId, runId: id, at: new Date().toISOString(), phase }) + '\n',
@@ -118,6 +182,9 @@ export class Store {
           }
           if (tail.length) this.save(state)
           if (['running', 'waiting', 'stopping'].includes(state.status)) {
+            cancelUnits(state)
+            state.modelProgress = undefined
+            state.reviewFailure = undefined
             state.status = 'interrupted'
             state.error = '服务已中断，可点击“继续任务”继续。'
             for (const gate of state.gates) if (gate.status === 'pending') gate.status = 'cancelled'

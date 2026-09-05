@@ -54,6 +54,16 @@ export class Workspace {
   read(relative: string) {
     return readFileSync(this.resolve(relative), 'utf8')
   }
+  previewEdit(relative: string, oldText: string, newText: string) {
+    const original = this.read(relative)
+    if (!oldText) throw new Error('oldText 不能为空。请先 read_file，再提供唯一的精确匹配文本。')
+    const matches = original.split(oldText).length - 1
+    if (matches !== 1)
+      throw new Error(
+        `edit_file 未执行：oldText 在 ${relative} 中匹配 ${matches} 次，必须恰好匹配 1 次。请先 read_file 读取最新内容，再用包含足够上下文的原文重新提交 edit_file；不要重复原参数。`,
+      )
+    return original.replace(oldText, () => newText)
+  }
   write(relative: string, content: string) {
     if (!/\.(html|css|js|json|md|txt)$/.test(relative))
       throw new Error('首版只支持 HTML、CSS、JS、JSON、Markdown 与文本文件')

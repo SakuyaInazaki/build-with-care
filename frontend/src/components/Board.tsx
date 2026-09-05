@@ -40,21 +40,35 @@ export function Board({
   update,
   stop,
   notify,
+  canRecheck = false,
 }: {
   run: RunState
   update: (run: RunState) => void
   stop: () => Promise<void>
   notify: (text: string) => void
+  canRecheck?: boolean
 }) {
   const items = useMemo(() => boardItems(run), [run])
   const [selected, setSelected] = useState<string | null>(null)
   const [constraintsOpen, setConstraintsOpen] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [checking, setChecking] = useState(false)
   const focused = items.find((item) => item.id === selected)
   const constraints = run.constraints.filter((constraint) => constraint.active)
   return (
     <>
       <div className="board-toolbar">
+        {canRecheck && !['running', 'waiting', 'stopping', 'ready'].includes(run.status) && run.files.length > 0 && <button className="button secondary" disabled={checking}
+          onClick={async () => {
+            setChecking(true)
+            try {
+              update(await api<RunState>(`/api/runs/${run.id}/verify`, { requestId: requestId(), revision: run.revision }))
+              notify('文件检查已完成')
+            } catch (error) { notify(error instanceof Error ? error.message : '检查未完成') }
+            finally { setChecking(false) }
+          }}>
+          {checking ? <Spinner /> : <ShieldCheck size={16} />}重新检查文件
+        </button>}
         <button
           className="constraint-toggle"
           aria-expanded={constraintsOpen}
@@ -95,35 +109,16 @@ export function Board({
         {lanes.map((lane) => {
           const cards = items.filter((item) => item.lane === lane)
           return (
-            <section className={`board-lane lane-${lane}`} key={lane} aria-label={laneLabels[lane]}>
-              <header className="lane-heading">
-                <span className={`lane-indicator ${lane}`} />
-                <h2>{laneLabels[lane]}</h2>
-                <span className="lane-count">{cards.length}</span>
-              </header>
-              <div className="lane-cards">
-                {cards.map((item) => (
-                  <Card
-                    key={item.id}
-                    item={item}
-                    selected={selected === item.id}
-                    select={() => setSelected(selected === item.id ? null : item.id)}
-                  />
-                ))}
-                {!cards.length && (
-                  <div className="lane-empty">
-                    {lane === 'verified' ? (
-                      <ShieldCheck size={23} />
-                    ) : lane === 'attention' ? (
-                      <Check size={23} />
-                    ) : (
-                      <Circle size={20} />
-                    )}
-                    <p>{emptyCopy[lane as keyof typeof emptyCopy]}</p>
-                  </div>
-                )}
-              </div>
-            </section>
+            <LaneColumn
+              key={`${run.id}-${lane}`}
+              lane={lane}
+              cards={lane === 'attention' ? cards : cards.reverse()}
+              selected={selected}
+              select={(id) => setSelected(selected === id ? null : id)}
+              collapse={() => {
+                if (cards.some((item) => item.id === selected)) setSelected(null)
+              }}
+            />
           )
         })}
       </div>
@@ -159,6 +154,77 @@ export function Board({
         </details>
       )}
     </>
+  )
+}
+
+function LaneColumn({
+  lane,
+  cards,
+  selected,
+  select,
+  collapse,
+}: {
+  lane: Lane
+  cards: BoardItem[]
+  selected: string | null
+  select: (id: string) => void
+  collapse: () => void
+}) {
+  const [open, setOpen] = useState(lane !== 'verified')
+  const contentId = `lane-cards-${lane}`
+  return (
+    <section
+      className={`board-lane lane-${lane} ${open ? '' : 'is-collapsed'}`}
+      aria-label={laneLabels[lane]}
+    >
+      <header className="lane-heading">
+        <h2>
+          <button
+            className="lane-toggle"
+            aria-expanded={open}
+            aria-controls={contentId}
+            onClick={() => {
+              if (open) collapse()
+              setOpen(!open)
+            }}
+          >
+            <span className={`lane-indicator ${lane}`} />
+            <span>{laneLabels[lane]}</span>
+            <span className="lane-count">{cards.length}</span>
+            <ChevronDown size={15} className={open ? '' : 'is-folded'} />
+          </button>
+        </h2>
+      </header>
+      <div
+        className="lane-cards"
+        id={contentId}
+        hidden={!open}
+        tabIndex={0}
+        role="region"
+        aria-label={`${laneLabels[lane]}的卡片`}
+      >
+        {cards.map((item) => (
+          <Card
+            key={item.id}
+            item={item}
+            selected={selected === item.id}
+            select={() => select(item.id)}
+          />
+        ))}
+        {!cards.length && (
+          <div className="lane-empty">
+            {lane === 'verified' ? (
+              <ShieldCheck size={23} />
+            ) : lane === 'attention' ? (
+              <Check size={23} />
+            ) : (
+              <Circle size={20} />
+            )}
+            <p>{emptyCopy[lane as keyof typeof emptyCopy]}</p>
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -202,6 +268,9 @@ function Card({
         )}
       </span>
       <h3>{item.title}</h3>
+      {item.steps.some((step) => step.externalSideEffect) && (
+        <span className="human-status">涉及外部影响</span>
+      )}
       <p className="card-summary">{item.summary}</p>
       {item.decision && (
         <span className="human-status">{humanLabels[item.decision.humanStatus]}</span>

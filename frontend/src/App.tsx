@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
+  Bell,
   Check,
   ChevronRight,
   CircleDot,
@@ -26,8 +27,20 @@ import { Activity } from './components/Activity.js'
 import { Settings } from './components/Settings.js'
 import { Empty, Spinner } from './components/ui.js'
 import { ShuffleLabel } from './components/ShuffleLabel.js'
+import { RunProgress } from './components/RunProgress.js'
+import { AttentionControl, useAttention } from './components/Attention.js'
+import { PaperLanding, PaperLandingPrelude } from './components/PaperLanding.js'
 
 type View = 'board' | 'artifacts' | 'activity' | 'record'
+type EntryView = 'checking' | 'landing' | 'workspace'
+const landingStorageKey = 'kanzheban.landing-entered'
+const onWelcomeRoute = () => window.location.pathname.replace(/\/$/, '') === '/welcome'
+const hasEnteredLanding = () => {
+  try { return localStorage.getItem(landingStorageKey) === 'yes' } catch { return false }
+}
+const rememberLanding = () => {
+  try { localStorage.setItem(landingStorageKey, 'yes') } catch { /* The current session still proceeds. */ }
+}
 const taskLabel = (run: RunState) => run.title.split(/[，。；;\n]/)[0].slice(0, 24)
 const views = [
   { id: 'board' as const, label: '决策看板', icon: LayoutDashboard },
@@ -39,6 +52,10 @@ const views = [
 export default function App() {
   const [runs, setRuns] = useState<RunState[]>([])
   const [settings, setSettings] = useState<PublicSettings | null>(null)
+  const [backendVersion, setBackendVersion] = useState('')
+  const [entryView, setEntryView] = useState<EntryView>(() =>
+    onWelcomeRoute() ? 'landing' : hasEnteredLanding() ? 'workspace' : 'checking',
+  )
   const [selected, setSelected] = useState<string | null>(null)
   const [view, setView] = useState<View>('board')
   const [loading, setLoading] = useState(true)
@@ -66,8 +83,22 @@ export default function App() {
       const result = await bootstrap()
       setRuns(result.runs)
       setSettings(result.settings)
+      setBackendVersion(result.backendVersion ?? '')
+      if (onWelcomeRoute()) {
+        setEntryView('landing')
+      } else {
+        const unfinished = result.runs.some((run) => !['completed', 'stopped'].includes(run.status))
+        if (hasEnteredLanding() || unfinished) {
+          if (unfinished) rememberLanding()
+          setEntryView('workspace')
+        } else {
+          history.replaceState(history.state, '', '/welcome')
+          setEntryView('landing')
+        }
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '无法连接本地服务。')
+      setEntryView('workspace')
     } finally {
       setLoading(false)
     }
@@ -75,6 +106,18 @@ export default function App() {
   useEffect(() => {
     void load()
   }, [load])
+  useEffect(() => {
+    const followRoute = () => setEntryView(onWelcomeRoute() ? 'landing' : 'workspace')
+    window.addEventListener('popstate', followRoute)
+    return () => window.removeEventListener('popstate', followRoute)
+  }, [])
+  const refreshBackend = useCallback(async () => {
+    try {
+      // Renew the process-scoped cookie after a service update without resetting user input.
+      const result = await bootstrap()
+      setBackendVersion(result.backendVersion ?? '')
+    } catch { /* EventSource retries while the local service is unavailable. */ }
+  }, [])
   useEffect(() => {
     if (!selected) return
     setConnection('reconnecting')
@@ -84,21 +127,49 @@ export default function App() {
       update(JSON.parse((event as MessageEvent).data))
       setConnection('connected')
     })
-    events.onerror = () => setConnection('reconnecting')
+    events.onerror = () => {
+      setConnection('reconnecting')
+      void refreshBackend()
+    }
     return () => events.close()
-  }, [selected, update])
+  }, [selected, update, refreshBackend])
+  const backgroundIds = runs.filter(entry => isActive(entry) && entry.id !== selected).map(entry => entry.id).sort().join(',')
+  useEffect(() => {
+    if (!backgroundIds) return
+    const sources = backgroundIds.split(',').map(id => {
+      const events = new EventSource(`/api/runs/${id}/stream`)
+      events.addEventListener('state', event => update(JSON.parse((event as MessageEvent).data)))
+      events.onerror = () => { void refreshBackend() }
+      return events
+    })
+    return () => sources.forEach(source => source.close())
+  }, [backgroundIds, update, refreshBackend])
   useEffect(() => {
     if (!notice) return
     const timer = setTimeout(() => setNotice(''), 4500)
     return () => clearTimeout(timer)
   }, [notice])
   const run = runs.find((entry) => entry.id === selected)
+  const openWorkspace = useCallback(() => {
+    rememberLanding()
+    if (onWelcomeRoute()) history.pushState(history.state, '', '/')
+    setEntryView('workspace')
+  }, [])
   const select = (id: string | null) => {
     setSelected(id)
     setView('board')
     setMobileOpen(false)
     setError('')
+    if (entryView !== 'workspace') openWorkspace()
   }
+  const attention = useAttention(runs, select)
+  useEffect(() => {
+    document.title = attention.items.length
+      ? `（${attention.items.length}）待处理 · 看着办`
+      : entryView === 'landing'
+        ? '看着办 · Build with Care'
+        : '看着办 · 工作空间'
+  }, [entryView, attention.items.length])
   const perform = async (work: () => Promise<void>) => {
     setBusy(true)
     setError('')
@@ -143,6 +214,48 @@ export default function App() {
       update(await api<RunState>(`/api/runs/${state.id}/grill`, { round: 0 }))
     })
 
+  const showWelcome = () => {
+    history.pushState(history.state, '', '/welcome')
+    setEntryView('landing')
+    setMobileOpen(false)
+    setSettingsOpen(false)
+  }
+  const attentionPrompt = (overLanding = false) =>
+    !!attention.visibleItems.length && (
+      <aside
+        className={`attention-prompt ${overLanding ? 'landing-attention' : ''}`}
+        role="alert"
+        aria-label="待处理提醒"
+      >
+        <div className="attention-prompt-title">
+          <Bell size={18} />
+          <strong>需要你处理</strong>
+          <span>{attention.visibleItems.length} 项</span>
+          <button
+            className="icon-button"
+            aria-label="关闭这条提醒"
+            onClick={() => attention.dismiss(attention.visibleItems[0].key)}
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <p>{attention.visibleItems[0].task}</p>
+        <span>{attention.visibleItems[0].message}</span>
+        <button className="button primary" onClick={() => select(attention.visibleItems[0].runId)}>
+          前往处理<ArrowRight size={16} />
+        </button>
+      </aside>
+    )
+
+  if (entryView === 'checking') return <PaperLandingPrelude />
+  if (entryView === 'landing')
+    return (
+      <>
+        <PaperLanding onEnter={openWorkspace} />
+        {attentionPrompt(true)}
+      </>
+    )
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
@@ -156,7 +269,7 @@ export default function App() {
         />
       )}
       <aside className={`sidebar ${mobileOpen ? 'is-open' : ''}`} aria-label="工作空间导航">
-        <button className="brand" onClick={() => select(null)} aria-label="看着办首页">
+        <button className="brand" onClick={showWelcome} aria-label="看着办首页">
           <span className="brand-icon">
             <CircleDot size={27} strokeWidth={1.65} />
           </span>
@@ -241,6 +354,7 @@ export default function App() {
             <span>{run ? taskLabel(run) : '任务概览'}</span>
           </div>
           <div className="topbar-actions">
+            <AttentionControl active={attention.active} toggle={() => void attention.toggle()} />
             {run && (
               <span className={`connection ${connection}`}>
                 <span className="status-dot" />
@@ -260,6 +374,7 @@ export default function App() {
           </div>
         </header>
         <main id="main" tabIndex={-1}>
+          {attention.permissionError && <div className="error-banner" role="alert">{attention.permissionError}</div>}
           {error && (
             <div className="error-banner" role="alert">
               <span>{error}</span>
@@ -378,7 +493,7 @@ export default function App() {
                 <div className="workspace-status">
                   <span className={`status-label ${run.status}`}>
                     <span className={`status-dot ${run.status}`} />
-                    {STATUS_LABELS[run.status]}
+                    {run.reviewFailure ? '审查需要重试' : STATUS_LABELS[run.status]}
                   </span>
                   {['interrupted', 'stopped', 'error'].includes(run.status) && (
                     <button
@@ -407,13 +522,38 @@ export default function App() {
               )}
               {run.error && (
                 <div className="error-banner" role="status">
-                  {run.error}
+                  {backendVersion === 'unified-work-units-v3' && run.error === '本轮已达到 30 次模型请求上限，请检查过程后新建任务'
+                    ? '此前运行因旧版次数上限中断。上限已移除，点击“继续任务”即可接着完成。'
+                    : run.error}
+                </div>
+              )}
+              <RunProgress run={run} />
+              {run.reviewFailure && run.status === 'running' && (
+                <div className="error-banner review-retry" role="alert">
+                  <span>{run.reviewFailure.message}</span>
+                  <button
+                    className="button primary"
+                    disabled={busy}
+                    onClick={() =>
+                      void perform(async () => {
+                        update(
+                          await api<RunState>(`/api/runs/${run.id}/retry-review`, {
+                            requestId: requestId(),
+                            revision: run.revision,
+                            stepId: run.reviewFailure!.stepId,
+                          }),
+                        )
+                      })
+                    }
+                  >
+                    重试审查
+                  </button>
                 </div>
               )}
               {run.status === 'ready' && view === 'board' ? (
-                <Intake run={run} update={update} notify={setNotice} />
+                <Intake key={`${run.id}:${run.grill?.round ?? 0}`} run={run} update={update} notify={setNotice} />
               ) : view === 'board' ? (
-                <Board run={run} update={update} stop={stop} notify={setNotice} />
+                <Board run={run} update={update} stop={stop} notify={setNotice} canRecheck={backendVersion === 'unified-work-units-v3'} />
               ) : view === 'artifacts' ? (
                 <Artifacts run={run} />
               ) : view === 'activity' ? (
@@ -433,6 +573,7 @@ export default function App() {
           )}
         </main>
       </div>
+      {attentionPrompt()}
       {notice && (
         <div className="toast" role="status">
           <Check size={17} />
