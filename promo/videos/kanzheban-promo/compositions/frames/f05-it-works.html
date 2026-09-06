@@ -1,0 +1,63 @@
+<template>
+<div data-hf-id="hf-0d6u" id="f05-it-works" data-composition-id="f05-it-works" data-start="0" data-width="1920" data-height="1080" data-duration="7.5">
+  <style>
+    @font-face { font-family:'PingFang SC'; src: local('PingFang SC'); }
+    @font-face { font-family:'PingFang SC'; font-weight:600; src: local('PingFang SC Semibold'); }
+    #f05-it-works {
+      position:relative; width:1920px; height:1080px; overflow:hidden; background:#EDE9E1;
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #f05-it-works .clip { position:absolute; inset:0; }
+    #f05-it-works .ground { position:absolute; inset:0;
+      background: radial-gradient(100% 76% at 50% 2%, #FDFCF9 0%, #F6F3EC 40%, #EBE6DC 74%, #E0DACD 100%);
+    }
+    #f05-it-works .floor { position:absolute; left:0; right:0; bottom:0; height:400px;
+      background: linear-gradient(to bottom, rgba(158,148,130,0), rgba(146,136,118,.18)); }
+    #f05-it-works .kick { position:absolute; font-size:22px; letter-spacing:.32em; color:#A86A3C; font-weight:500; }
+    #f05-it-works .h1 { position:absolute; font-size:58px; font-weight:600; letter-spacing:-.03em; line-height:1.26; color:#212823; }
+    #f05-it-works .tail { position:absolute; font-size:34px; font-weight:400; letter-spacing:-.01em; color:#6B7268; line-height:1.5; }
+    #f05-it-works .sheet { position:absolute; border-radius:22px; overflow:hidden; background:#fff;
+      box-shadow: 0 3px 9px rgba(34,40,36,.06), 0 22px 44px -12px rgba(34,40,36,.16), 0 72px 130px -38px rgba(34,40,36,.28); }
+    #f05-it-works .sheet img { position:absolute; height:auto; }
+    #f05-it-works .rim { position:absolute; inset:0; border-radius:22px; pointer-events:none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.75); }
+    #f05-it-works .kick { left:118px; top:104px; }
+    #f05-it-works .h1   { left:118px; top:152px; width:1500px; }
+    /* the only tilted narrative plane in the film — licensed because the unit
+       cards' own prose drops to texture here and is not offered to be read */
+    #f05-it-works .stage { position:absolute; left:0; right:0; top:430px; height:520px; perspective:1500px; perspective-origin:50% 30%; }
+    #f05-it-works .rail  { position:absolute; left:0; top:0; width:2600px; transform-style:preserve-3d; }
+    #f05-it-works .rail .sheet { position:absolute; left:0; top:0; width:2600px; height:446px; }
+    #f05-it-works .rail .sheet img { left:0; top:0; width:2600px; }
+    #f05-it-works .tail { left:118px; top:966px; }  </style>
+  <section data-hf-id="hf-07g6" id="f05-it-works-stage" class="clip" data-start="0" data-duration="7.5">
+    <div data-hf-id="hf-ygft" class="ground"></div>
+    <div data-hf-id="hf-tan6" class="stage">
+      <div data-hf-id="hf-59yt" class="rail" id="f05-it-works-rail">
+        <div data-hf-id="hf-cr6h" class="sheet"><img data-hf-id="hf-zh37" src="assets/crop-units.png" alt=""><div data-hf-id="hf-5gs0" class="rim"></div></div>
+      </div>
+    </div>
+    <div data-hf-id="hf-rtxf" class="kick" id="f05-it-works-k">过程时间线</div>
+    <div data-hf-id="hf-nrel" class="h1" id="f05-it-works-h">然后它开始干活。</div>
+    <div data-hf-id="hf-988v" class="tail" id="f05-it-works-t">一个单元，一个单元。</div>
+    <div data-hf-id="hf-kk9u" class="floor"></div>
+  </section>
+</div>
+<script>
+  (function () {
+    var tl = gsap.timeline({ paused: true });
+    tl.fromTo("#f05-it-works-k", { y:12, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.6, ease:"power3.out" }, .1);
+    tl.fromTo("#f05-it-works-h", { y:24, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.9, ease:"power3.out" }, .25);
+    // pose into the tilt, run the strip past, then flatten — the flatten is the cue to read again
+    tl.fromTo("#f05-it-works-rail",
+      { rotateX:0, rotateY:0, x:-140, autoAlpha:0 },
+      { rotateX:22, rotateY:-17, x:-360, autoAlpha:1, duration:1.5, ease:"power3.out" }, .9);
+    tl.to("#f05-it-works-rail", { x:-1180, duration:3.0, ease:"power1.inOut" }, 2.4);
+    tl.fromTo("#f05-it-works-t", { y:16, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.7, ease:"power3.out" }, 2.6);
+    tl.to("#f05-it-works-rail", { rotateX:0, rotateY:0, x:-1240, duration:1.2, ease:"power3.out" }, 5.5);
+    tl.to({}, { duration: 7 }, 0);
+    window.__timelines["f05-it-works"] = tl;
+  })();
+</script>
+</template>

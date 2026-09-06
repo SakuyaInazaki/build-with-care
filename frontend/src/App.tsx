@@ -7,6 +7,7 @@ import {
   Bell,
   Check,
   ChevronRight,
+  Download,
   CircleDot,
   FileCheck2,
   FolderOpen,
@@ -32,11 +33,17 @@ import { ShuffleLabel } from './components/ShuffleLabel.js'
 import { RunProgress } from './components/RunProgress.js'
 import { AttentionControl, useAttention } from './components/Attention.js'
 import { PaperLanding, PaperLandingPrelude } from './components/PaperLanding.js'
+import { BrandMark } from './components/BrandMark.js'
 
 type View = 'board' | 'artifacts' | 'activity' | 'record'
 type EntryView = 'checking' | 'landing' | 'workspace'
 const landingStorageKey = 'kanzheban.landing-entered'
 const onWelcomeRoute = () => window.location.pathname.replace(/\/$/, '') === '/welcome'
+// 只读展示站：每位访客都该先看到纸墨欢迎页，不受本机「已进入过」记录影响。
+const isShowcase = () =>
+  (window as unknown as { __KANZHEBAN_SHOWCASE__?: boolean }).__KANZHEBAN_SHOWCASE__ === true
+// 从下载页返回时不该再被欢迎页拦一次。
+const wantsWorkspace = () => new URLSearchParams(window.location.search).has('workspace')
 const hasEnteredLanding = () => {
   try { return localStorage.getItem(landingStorageKey) === 'yes' } catch { return false }
 }
@@ -61,8 +68,17 @@ export default function App() {
   const [backendVersion, setBackendVersion] = useState('')
   const [capabilities, setCapabilities] = useState<string[]>([])
   const [entryView, setEntryView] = useState<EntryView>(() =>
-    onWelcomeRoute() ? 'landing' : hasEnteredLanding() ? 'workspace' : 'checking',
+    onWelcomeRoute()
+      ? 'landing'
+      : wantsWorkspace()
+        ? 'workspace'
+        : isShowcase()
+          ? 'landing'
+          : hasEnteredLanding()
+            ? 'workspace'
+            : 'checking',
   )
+  const [workspacePrepared, setWorkspacePrepared] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [view, setView] = useState<View>('board')
@@ -94,16 +110,18 @@ export default function App() {
       setBackendVersion(result.backendVersion ?? '')
       setCapabilities(result.capabilities ?? [])
       if (onWelcomeRoute()) {
+        setWorkspacePrepared(false)
         setEntryView('landing')
       } else {
         const unfinished = result.runs.some(
           (run) => !run.archivedAt && !['completed', 'stopped'].includes(run.status),
         )
-        if (hasEnteredLanding() || unfinished) {
+        if (wantsWorkspace() || (!isShowcase() && (hasEnteredLanding() || unfinished))) {
           if (unfinished) rememberLanding()
           setEntryView('workspace')
         } else {
           history.replaceState(history.state, '', '/welcome')
+          setWorkspacePrepared(false)
           setEntryView('landing')
         }
       }
@@ -118,7 +136,11 @@ export default function App() {
     void load()
   }, [load])
   useEffect(() => {
-    const followRoute = () => setEntryView(onWelcomeRoute() ? 'landing' : 'workspace')
+    const followRoute = () => {
+      const welcome = onWelcomeRoute()
+      setWorkspacePrepared(false)
+      setEntryView(welcome ? 'landing' : 'workspace')
+    }
     window.addEventListener('popstate', followRoute)
     return () => window.removeEventListener('popstate', followRoute)
   }, [])
@@ -169,6 +191,7 @@ export default function App() {
     rememberLanding()
     if (onWelcomeRoute()) history.pushState(history.state, '', '/')
     setEntryView('workspace')
+    setWorkspacePrepared(false)
   }, [])
   const select = (id: string | null, archiveView?: boolean) => {
     setSelected(id)
@@ -229,7 +252,9 @@ export default function App() {
     setNotice(archive ? '任务已归档' : '任务已恢复')
   }
   const pending = run?.gates.filter((gate) => gate.status === 'pending').length ?? 0
-  const archiveSupported = capabilities.includes('task-archive-v1')
+  // 只读展示站：访客只看已有记录，不创建任务，也不接触模型配置。
+  const readOnly = capabilities.includes('read-only-v1')
+  const archiveSupported = capabilities.includes('task-archive-v1') && !readOnly
   const archiveEligible =
     !!run &&
     ['ready', 'completed', 'error', 'stopped', 'interrupted'].includes(run.status) &&
@@ -257,6 +282,7 @@ export default function App() {
 
   const showWelcome = () => {
     history.pushState(history.state, '', '/welcome')
+    setWorkspacePrepared(false)
     setEntryView('landing')
     setMobileOpen(false)
     setSettingsOpen(false)
@@ -289,16 +315,16 @@ export default function App() {
     )
 
   if (entryView === 'checking') return <PaperLandingPrelude />
-  if (entryView === 'landing')
-    return (
-      <>
-        <PaperLanding onEnter={openWorkspace} />
-        {attentionPrompt(true)}
-      </>
-    )
 
   return (
-    <div className="app-shell">
+    <>
+      {(entryView === 'workspace' || workspacePrepared) && (
+        <div
+          key="workspace"
+          className="app-shell"
+          inert={entryView === 'landing'}
+          aria-hidden={entryView === 'landing'}
+        >
       <a className="skip-link" href="#main">
         跳到主要内容
       </a>
@@ -312,14 +338,16 @@ export default function App() {
       <aside className={`sidebar ${mobileOpen ? 'is-open' : ''}`} aria-label="工作空间导航">
         <button className="brand" onClick={showWelcome} aria-label="看着办首页">
           <span className="brand-icon">
-            <CircleDot size={27} strokeWidth={1.65} />
+            <BrandMark />
           </span>
           <span>看着办</span>
         </button>
-        <button className="new-task button" onClick={() => select(null, false)}>
-          <Plus size={17} />
-          新建任务
-        </button>
+        {!readOnly && (
+          <button className="new-task button" onClick={() => select(null, false)}>
+            <Plus size={17} />
+            新建任务
+          </button>
+        )}
         <p className="nav-caption">工作空间</p>
         <button className={`nav-item ${!run && !showArchived ? 'selected' : ''}`} onClick={() => select(null, false)}>
           <LayoutDashboard size={18} />
@@ -376,13 +404,24 @@ export default function App() {
           )}
         </div>
         <div className="sidebar-footer">
-          <button className="settings-entry" onClick={() => setSettingsOpen(true)}>
-            <Settings2 size={18} />
-            <span>
-              模型与设置<small>{settings?.configured ? '模型已配置' : '连接模型以开始'}</small>
-            </span>
-            <ChevronRight size={15} />
-          </button>
+          {readOnly && (
+            <a className="settings-entry download-entry" href="/downloads/">
+              <Download size={18} />
+              <span>
+                下载离线包<small>在本机跑完整版</small>
+              </span>
+              <ChevronRight size={15} />
+            </a>
+          )}
+          {!readOnly && (
+            <button className="settings-entry" onClick={() => setSettingsOpen(true)}>
+              <Settings2 size={18} />
+              <span>
+                模型与设置<small>{settings?.configured ? '模型已配置' : '连接模型以开始'}</small>
+              </span>
+              <ChevronRight size={15} />
+            </button>
+          )}
           <div className="local-label">
             <span className="status-dot" />
             本机工作空间
@@ -409,13 +448,15 @@ export default function App() {
                 {connection === 'connected' ? '实时同步' : '重新连接中'}
               </span>
             )}
-            <button
-              className="icon-button"
-              aria-label="模型与设置"
-              onClick={() => setSettingsOpen(true)}
-            >
-              <Settings2 size={18} />
-            </button>
+            {!readOnly && (
+              <button
+                className="icon-button"
+                aria-label="模型与设置"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <Settings2 size={18} />
+              </button>
+            )}
             <span className="avatar" aria-label="本机用户">
               我
             </span>
@@ -458,6 +499,14 @@ export default function App() {
                 <span className="eyebrow">{showArchived ? '任务存档' : '你的工作空间'}</span>
                 {showArchived ? (
                   <h1>已归档的任务</h1>
+                ) : readOnly ? (
+                  <h1>
+                    这里存着，
+                    <br />
+                    <span>
+                      <ShuffleLabel>人做过的每一次判断。</ShuffleLabel>
+                    </span>
+                  </h1>
                 ) : (
                   <h1>
                     下一件想做的事，
@@ -468,7 +517,7 @@ export default function App() {
                   </h1>
                 )}
               </div>
-              {!showArchived && <form
+              {!showArchived && !readOnly && <form
                 className="task-composer"
                 onSubmit={(event) => {
                   event.preventDefault()
@@ -631,7 +680,7 @@ export default function App() {
                   batchEnabled={capabilities.includes('grill-batch-v1')}
                 />
               ) : view === 'board' ? (
-                <Board run={run} update={update} stop={stop} notify={setNotice} canRecheck={!run.archivedAt && supportsWorkUnits(backendVersion)} />
+                <Board run={run} update={update} stop={stop} notify={setNotice} readOnly={readOnly} canRecheck={!readOnly && !run.archivedAt && supportsWorkUnits(backendVersion)} />
               ) : view === 'artifacts' ? (
                 <Artifacts run={run} />
               ) : view === 'activity' ? (
@@ -640,6 +689,7 @@ export default function App() {
                 <RecordView
                   run={run}
                   update={update}
+                  readOnly={readOnly}
                   onDeleted={() => {
                     setRuns((previous) => previous.filter((entry) => entry.id !== run.id))
                     select(null)
@@ -651,7 +701,7 @@ export default function App() {
           )}
         </main>
       </div>
-      {attentionPrompt()}
+      {entryView === 'workspace' && attentionPrompt()}
       {notice && (
         <div className="toast" role="status">
           <Check size={17} />
@@ -661,6 +711,14 @@ export default function App() {
       {settingsOpen && settings && (
         <Settings settings={settings} onSave={setSettings} onClose={() => setSettingsOpen(false)} />
       )}
-    </div>
+        </div>
+      )}
+      {entryView === 'landing' && (
+        <div key="landing">
+          <PaperLanding onEnterStart={() => setWorkspacePrepared(true)} onEnter={openWorkspace} />
+          {attentionPrompt(true)}
+        </div>
+      )}
+    </>
   )
 }

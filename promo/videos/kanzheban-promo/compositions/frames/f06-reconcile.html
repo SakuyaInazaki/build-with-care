@@ -1,0 +1,145 @@
+<template>
+<div data-hf-id="hf-5zgl" id="f06-reconcile" data-composition-id="f06-reconcile" data-start="0" data-width="1920" data-height="1080" data-duration="11.5">
+  <style>
+    @font-face { font-family:'PingFang SC'; src: local('PingFang SC'); }
+    @font-face { font-family:'PingFang SC'; font-weight:600; src: local('PingFang SC Semibold'); }
+    #f06-reconcile {
+      position:relative; width:1920px; height:1080px; overflow:hidden;
+      background:#EDE9E1;
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #f06-reconcile .clip { position:absolute; inset:0; }
+    #f06-reconcile .ground {
+      position:absolute; inset:0;
+      background: radial-gradient(100% 74% at 50% 2%, #FDFCF9 0%, #F6F3EC 40%, #EBE6DC 74%, #E0DACD 100%);
+    }
+    #f06-reconcile .floor {
+      position:absolute; left:0; right:0; bottom:0; height:420px;
+      background: linear-gradient(to bottom, rgba(158,148,130,0), rgba(146,136,118,.20));
+    }
+    /* contact reflection — the sheets stand on the ground instead of floating in a void */
+    #f06-reconcile .refl {
+      position:absolute; top:692px; height:150px; border-radius:0 0 20px 20px;
+      background: linear-gradient(to bottom, rgba(255,255,255,.55), rgba(255,255,255,0));
+      -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,.5), rgba(0,0,0,0));
+              mask-image: linear-gradient(to bottom, rgba(0,0,0,.5), rgba(0,0,0,0));
+      filter: blur(1px);
+    }
+    #f06-reconcile .reflL { left:118px; width:800px; }
+    #f06-reconcile .reflR { left:1002px; width:800px; }
+
+    #f06-reconcile .kicker {
+      position:absolute; left:118px; top:88px;
+      font-size:22px; letter-spacing:.32em; color:#A86A3C; font-weight:500;
+    }
+    #f06-reconcile .h1 {
+      position:absolute; left:118px; top:140px; width:1700px;
+      font-size:62px; font-weight:600; letter-spacing:-.03em; line-height:1.26; color:#212823;
+    }
+
+    /* two planes, each whole — nothing the viewer reads is cut horizontally.
+       They bleed off the BOTTOM edge only, because the document continues down there. */
+    #f06-reconcile .col { position:absolute; top:486px; width:800px; }
+    #f06-reconcile .colL { left:118px; }
+    #f06-reconcile .colR { left:1002px; }
+    /* the sheet is cropped to the column's own body — the screenshot's duplicate
+       header row is clipped away, the frame states it once at a readable size */
+    #f06-reconcile .sheet {
+      position:relative; border-radius:20px; overflow:hidden; height:206px;
+      background:#fff;
+      box-shadow:
+        0 3px 8px rgba(36,42,38,.05),
+        0 20px 40px -10px rgba(36,42,38,.14),
+        0 64px 120px -34px rgba(36,42,38,.26);
+    }
+    #f06-reconcile .sheet img { display:block; width:800px; height:auto; margin-top:-58px; }
+    #f06-reconcile .sheet .rim {
+      position:absolute; inset:0; border-radius:20px; pointer-events:none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.8), inset 0 1px 0 rgba(255,255,255,.95);
+    }
+    /* the task's own prose falls off into the paper — it is evidence, not the message */
+    #f06-reconcile .fade {
+      position:absolute; left:0; right:0; bottom:0; height:78px; pointer-events:none;
+      background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,.96) 70%, #fff 100%);
+    }
+    #f06-reconcile .tag {
+      position:absolute; left:0; top:-56px;
+      font-size:30px; font-weight:600; letter-spacing:-.01em; color:#2B332E;
+    }
+    #f06-reconcile .tag em {
+      font-style:normal; font-size:20px; font-weight:500; letter-spacing:.06em;
+      color:#8A9089; margin-left:14px;
+    }
+
+    /* the relationship itself — frame-level type on the paper, never a fake UI chip */
+    /* the relationship lives in the gap between the two sheets, never on top of one */
+    #f06-reconcile .rel { position:absolute; left:918px; top:486px; width:84px; height:206px; }
+    #f06-reconcile .rel .word {
+      position:absolute; left:0; right:0; top:62px;
+      font-size:22px; line-height:1.32; letter-spacing:.06em; color:#A86A3C; font-weight:600;
+      text-align:center; writing-mode:vertical-rl; margin:0 auto; width:22px;
+    }
+    #f06-reconcile .rel .barT, #f06-reconcile .rel .barB {
+      position:absolute; left:41px; width:1px; background:#CBB299;
+    }
+    #f06-reconcile .rel .barT { top:14px; height:38px; }
+    #f06-reconcile .rel .barB { top:156px; height:38px; }
+  </style>
+  <section data-hf-id="hf-g68b" id="f06-stage" class="clip" data-start="0" data-duration="11.5">
+    <div data-hf-id="hf-ygft" class="ground"></div>
+    <div data-hf-id="hf-kk9u" class="floor"></div>
+
+    <div data-hf-id="hf-okqy" class="refl reflL"></div>
+    <div data-hf-id="hf-hjrw" class="refl reflR"></div>
+    <div data-hf-id="hf-qjko" class="kicker" id="f06-kicker">对账</div>
+    <div data-hf-id="hf-ah6x" class="h1" id="f06-h1">每一步落笔之前，它先和你说过的话对一次。</div>
+
+    <div data-hf-id="hf-hsmh" class="col colL" id="f06-colL">
+      <div data-hf-id="hf-4bbr" class="tag">你的要求<em data-hf-id="hf-23pc">v3</em></div>
+      <div data-hf-id="hf-cr6h" class="sheet">
+        <img data-hf-id="hf-886y" src="assets/crop-col-requirement.png" alt="">
+        <div data-hf-id="hf-8ps2" class="fade"></div>
+        <div data-hf-id="hf-5gs0" class="rim"></div>
+      </div>
+    </div>
+
+    <div data-hf-id="hf-yjch" class="col colR" id="f06-colR">
+      <div data-hf-id="hf-3nw1" class="tag">Agent 的行动</div>
+      <div data-hf-id="hf-4xgt" class="sheet">
+        <img data-hf-id="hf-98ot" src="assets/crop-col-action.png" alt="">
+        <div data-hf-id="hf-fl5y" class="fade"></div>
+        <div data-hf-id="hf-yq6g" class="rim"></div>
+      </div>
+    </div>
+
+    <div data-hf-id="hf-vui7" class="rel" id="f06-rel">
+      <span data-hf-id="hf-hczi" class="barT" id="f06-barT"></span>
+      <span data-hf-id="hf-1mrx" class="word">对照</span>
+      <span data-hf-id="hf-lrgi" class="barB" id="f06-barB"></span>
+    </div>
+  </section>
+</div>
+<script>
+  (function () {
+    var tl = gsap.timeline({ paused: true });
+
+    tl.fromTo("#f06-kicker", { y: 14, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .6, ease: "power3.out" }, 0.15);
+    tl.fromTo("#f06-h1", { y: 26, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .95, ease: "power3.out" }, 0.3);
+
+    // the requirement is laid down first — it is the thing everything else is measured against
+    tl.fromTo("#f06-colL", { y: 54, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 1.15, ease: "power3.out" }, 1.5);
+
+    // the agent's action arrives second, beside it
+    tl.fromTo("#f06-colR", { y: 54, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 1.15, ease: "power3.out" }, 4.2);
+
+    // only once both exist does the relationship between them get named
+    tl.fromTo("#f06-rel .word", { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: .6, ease: "power3.out" }, 6.6);
+    tl.fromTo("#f06-barT", { scaleY: 0, transformOrigin: "50% 100%" }, { scaleY: 1, duration: .7, ease: "power3.out" }, 6.7);
+    tl.fromTo("#f06-barB", { scaleY: 0, transformOrigin: "50% 0%" },   { scaleY: 1, duration: .7, ease: "power3.out" }, 6.7);
+
+    tl.to({}, { duration: 11 }, 0);
+    window.__timelines["f06-reconcile"] = tl;
+  })();
+</script>
+</template>

@@ -21,6 +21,8 @@ import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import type {
   AdditionInput,
+  BehaviorVerification,
+  CorrectionResolution,
   Decision,
   Gate,
   Intervention,
@@ -35,6 +37,11 @@ import { hash, inspectHtml, Workspace } from './workspace.js'
 import { CompatibleAdapter } from './models.js'
 import { DemoAdapter } from './demo.js'
 import { LocalAgentExecutor } from '../../src/stream.js'
+import {
+  behaviorVerifyInputSchema,
+  verifyBehavior,
+  type BehaviorVerifyInput,
+} from './behavior-verifier.js'
 import {
   activeUnit,
   cancelUnits,
@@ -90,6 +97,8 @@ export interface RuntimeOptions {
   adapter?: (onRequest: (o: GenerateOptions) => void) => LlmAdapter
   continuation?: boolean
   reviewRecoveryStepId?: string
+  runInstruction?: { requestId: string; text: string }
+  includeOutstandingCorrections?: boolean
 }
 export class DecisionRuntime {
   readonly workspace: Workspace
@@ -339,6 +348,10 @@ export class DecisionRuntime {
                 text:
                   this.state.prompt +
                   recoveryResult +
+                  (this.options.runInstruction
+                    ? `\nDECISION_DESK_RUN_INSTRUCTION:${this.options.runInstruction.requestId}\n这是人明确下达的本轮运行指令，不是新需求，不改变当前要求版本：\n${this.options.runInstruction.text}`
+                    : '') +
+                  this.outstandingCorrectionsText() +
                   (this.options.continuation || this.state.steps.length
                     ? '\n这是人明确要求的继续执行。沿用当前有效要求，先读取现有文件，保留已经完成的部分。已完成的历史动作不需要重演，已取消的旧调用不得直接放行。当前文件：' +
                       JSON.stringify(this.workspace.list())
@@ -578,6 +591,133 @@ export class DecisionRuntime {
         },
       }),
     )
+    const observationProperties = {
+      name: { type: 'string', required: true },
+      kind: { type: 'string', required: true },
+      selector: { type: 'string' },
+      attribute: { type: 'string' },
+      property: { type: 'string' },
+      storage: { type: 'string' },
+      key: { type: 'string' },
+      path: { type: 'array', items: { type: 'string' } },
+      metric: { type: 'string' },
+      x: { type: 'number' },
+      y: { type: 'number' },
+      width: { type: 'number' },
+      height: { type: 'number' },
+    } as const
+    const referenceProperties = {
+      checkpoint: { type: 'string', required: true },
+      observation: { type: 'string', required: true },
+    } as const
+    ctx.tools.register(
+      defineTool({
+        name: 'verify_behavior',
+        description:
+          '针对一条尚未验证的人类纠正，在当前 HTML 成品上运行受控浏览器场景。只允许白名单动作、只读观测和机械断言；场景先由独立审查核对覆盖关系。只有相关性审查通过、实际断言全部通过且当前文件哈希仍一致，纠正才会变为已验证。',
+        parameters: {
+          interventionId: { type: 'string', required: true },
+          path: { type: 'string', required: true },
+          scenario: {
+            type: 'object',
+            required: true,
+            additionalProperties: false,
+            properties: {
+              title: { type: 'string', required: true },
+              steps: {
+                type: 'array',
+                required: true,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    kind: { type: 'string', required: true },
+                    selector: { type: 'string' },
+                    value: { type: 'string' },
+                    key: { type: 'string' },
+                    durationMs: { type: 'number' },
+                    ms: { type: 'number' },
+                    checkpoint: { type: 'string' },
+                    observations: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: observationProperties,
+                      },
+                    },
+                  },
+                },
+              },
+              assertions: {
+                type: 'array',
+                required: true,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    name: { type: 'string', required: true },
+                    left: {
+                      type: 'object',
+                      required: true,
+                      additionalProperties: false,
+                      properties: referenceProperties,
+                    },
+                    operator: { type: 'string', required: true },
+                    // 预期值是任意 JSON 值（zod 侧为 z.unknown()）；dsh 的工具 schema
+                    // 不接受无类型声明的属性，必须显式标成 json。
+                    expected: { type: 'json' },
+                    compareTo: {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: referenceProperties,
+                    },
+                    minimum: { type: 'number' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        output,
+        async execute(rawArgs, exec) {
+          const result = await thisRuntime.executeBehaviorVerification(
+            behaviorVerifyInputSchema.parse(rawArgs),
+            String(exec.callId),
+            exec.signal,
+          )
+          // 结果本身是纯 JSON 结构，只是接口没有索引签名，无法直接满足 JsonValue。
+          return JSON.parse(JSON.stringify(result))
+        },
+      }),
+    )
+    ctx.tools.register(
+      defineTool({
+        name: 'supersede_correction',
+        description:
+          '仅当一条更晚、仍有效的人类要求明确取代某条历史纠正时，将该纠正确认记为“后续要求已取代”。必须引用真实要求 ID 并通过独立审查；这不是行为验证通过。',
+        parameters: {
+          interventionId: { type: 'string', required: true },
+          supersedingConstraintIds: {
+            type: 'array',
+            required: true,
+            items: { type: 'string' },
+          },
+          reason: { type: 'string', required: true },
+        },
+        output,
+        async execute(args, exec) {
+          return thisRuntime.supersedeCorrection(
+            {
+              interventionId: String(args.interventionId),
+              supersedingConstraintIds: (args.supersedingConstraintIds as unknown[]).map(String),
+              reason: String(args.reason),
+            },
+            String(exec.callId),
+          )
+        },
+      }),
+    )
     ctx.tools.register(
       defineTool({
         name: 'run_command',
@@ -626,6 +766,7 @@ export class DecisionRuntime {
               )
             )
               check.stale = true
+          thisRuntime.refreshTargetedEvidence()
           if (thisRuntime.stopRequested || exec.signal.aborted)
             throw new Error('任务已停止，命令结果不再作为成功证据。')
           if (!result.ok) throw new Error(result.error ?? '命令失败')
@@ -658,8 +799,158 @@ export class DecisionRuntime {
       )
         i.progress = 'acted'
     this.state.files = this.workspace.list()
+    this.refreshTargetedEvidence()
     this.commit('artifact.written', artifact)
     return artifact
+  }
+
+  private correctionFor(id: string) {
+    const intervention = this.state.interventions.find((item) => item.id === id)
+    if (!intervention || !['correct', 'enforce'].includes(intervention.action))
+      throw new Error('目标不是一条可验证的人类纠正。')
+    if (['verified', 'superseded'].includes(intervention.progress))
+      throw new Error('这条纠正已经关闭；请检查最新待验证记录。')
+    const decision = this.state.decisions.find((item) => item.id === intervention.decisionId)
+    if (!decision) throw new Error('目标纠正缺少原始决定记录。')
+    return { intervention, decision }
+  }
+
+  private behaviorEvidenceIsCurrent(evidence: BehaviorVerification) {
+    if (
+      evidence.stale ||
+      evidence.revision !== this.state.revision ||
+      evidence.result.status !== 'passed' ||
+      evidence.result.revision !== this.state.revision ||
+      !evidence.result.loadedArtifacts.length
+    )
+      return false
+    const files = new Map(this.state.files.map((file) => [file.path, file.hash]))
+    return (
+      files.get(evidence.result.entry.path) === evidence.result.entry.hash &&
+      evidence.result.loadedArtifacts.every((file) => files.get(file.path) === file.hash)
+    )
+  }
+
+  private resolutionIsCurrent(resolution: CorrectionResolution) {
+    const target = this.state.interventions.find((item) => item.id === resolution.interventionId)
+    return (
+      !resolution.stale &&
+      !!target &&
+      resolution.supersedingConstraintIds.length > 0 &&
+      resolution.supersedingConstraintIds.every((id) => {
+        const constraint = this.state.constraints.find((item) => item.id === id)
+        return !!constraint?.active && constraint.revision > target.toRevision
+      })
+    )
+  }
+
+  private refreshTargetedEvidence() {
+    for (const evidence of this.state.behaviorVerifications ?? [])
+      if (!this.behaviorEvidenceIsCurrent(evidence)) evidence.stale = true
+    for (const resolution of this.state.correctionResolutions ?? [])
+      if (!this.resolutionIsCurrent(resolution)) resolution.stale = true
+    for (const intervention of this.state.interventions) {
+      const behavior = (this.state.behaviorVerifications ?? []).filter(
+        (item) => item.interventionId === intervention.id,
+      )
+      const resolutions = (this.state.correctionResolutions ?? []).filter(
+        (item) => item.interventionId === intervention.id,
+      )
+      if (
+        intervention.progress === 'verified' &&
+        behavior.length &&
+        !behavior.some((item) => this.behaviorEvidenceIsCurrent(item))
+      )
+        intervention.progress = 'acted'
+      if (
+        intervention.progress === 'superseded' &&
+        resolutions.length &&
+        !resolutions.some((item) => this.resolutionIsCurrent(item))
+      )
+        intervention.progress = 'acted'
+    }
+  }
+
+  private async executeBehaviorVerification(
+    input: BehaviorVerifyInput,
+    callId: string,
+    signal: AbortSignal,
+  ) {
+    const step = this.state.steps.find((item) => item.callId === callId)
+    if (!step || step.revision !== this.state.revision || step.review?.classification !== 'execution')
+      throw new Error('针对性检查尚未通过当前版本的独立覆盖审查。')
+    const { intervention, decision } = this.correctionFor(input.interventionId)
+    const result = await verifyBehavior(this.workspace, this.state.revision, input, signal)
+    if (signal.aborted || this.stopRequested)
+      throw Object.assign(new Error('行为检查已停止。'), { name: 'AbortError' })
+    this.state.files = this.workspace.list()
+    const evidence: BehaviorVerification = {
+      id: randomUUID(),
+      stepId: step.id,
+      interventionId: intervention.id,
+      decisionId: decision.id,
+      path: input.path,
+      revision: this.state.revision,
+      review: step.review,
+      result,
+      stale: false,
+      createdAt: now(),
+    }
+    ;(this.state.behaviorVerifications ??= []).push(evidence)
+    const current = this.behaviorEvidenceIsCurrent(evidence)
+    if (!current) evidence.stale = result.status === 'passed'
+    intervention.progress = current ? 'verified' : 'acted'
+    this.commit('behavior.verification-completed', {
+      evidence,
+      progress: intervention.progress,
+    })
+    if (!current)
+      throw new Error(
+        result.status === 'failed'
+          ? `针对性行为检查未通过：${result.reason ?? '至少一项机械断言失败。'}`
+          : `针对性行为检查无法得出结论：${result.reason ?? '缺少可观测证据。'}`,
+      )
+    return result
+  }
+
+  private supersedeCorrection(
+    input: { interventionId: string; supersedingConstraintIds: string[]; reason: string },
+    callId: string,
+  ) {
+    const step = this.state.steps.find((item) => item.callId === callId)
+    if (!step || step.revision !== this.state.revision || step.review?.classification !== 'execution')
+      throw new Error('后续要求的取代关系尚未通过独立审查。')
+    const { intervention, decision } = this.correctionFor(input.interventionId)
+    const ids = [...new Set(input.supersedingConstraintIds)]
+    const reason = input.reason.trim()
+    if (!ids.length || ids.length > 10 || !reason || reason.length > 2000)
+      throw new Error('请提供明确原因和 1 至 10 条后续有效要求。')
+    for (const id of ids) {
+      const constraint = this.state.constraints.find((item) => item.id === id)
+      if (!constraint?.active || constraint.revision <= intervention.toRevision)
+        throw new Error('取代关系只能引用晚于原纠正且仍有效的人类要求。')
+    }
+    const resolution: CorrectionResolution = {
+      id: randomUUID(),
+      stepId: step.id,
+      interventionId: intervention.id,
+      decisionId: decision.id,
+      revision: this.state.revision,
+      supersedingConstraintIds: ids,
+      reason,
+      review: step.review,
+      stale: false,
+      createdAt: now(),
+    }
+    ;(this.state.correctionResolutions ??= []).push(resolution)
+    intervention.progress = 'superseded'
+    this.commit('intervention.superseded', { resolution, progress: intervention.progress })
+    return {
+      interventionId: intervention.id,
+      progress: intervention.progress,
+      supersedingConstraintIds: ids,
+      reason,
+    }
   }
 
   private verify(file: string, callId: string) {
@@ -1094,6 +1385,32 @@ export class DecisionRuntime {
     return `DECISION_DESK_INTERVENTION:${intervention.id}\n${intervention.additionKind === 'idea' ? '人补充的参考想法（不改变硬约束）：请先回应可行性，不要据此自行修改产物，等待人明确要求实施。' : '人追加的有效要求：请据此继续或修补当前产物，保留其他已完成部分，并运行对应检查。'}\n${intervention.text}`
   }
 
+  private outstandingCorrectionsText() {
+    if (!this.options.includeOutstandingCorrections) return ''
+    const corrections = this.state.interventions.flatMap((intervention) => {
+      if (
+        !['correct', 'enforce'].includes(intervention.action) ||
+        intervention.progress === 'verified'
+      )
+        return []
+      const decision = this.state.decisions.find((item) => item.id === intervention.decisionId)
+      if (!decision) return []
+      return [
+        {
+          interventionId: intervention.id,
+          decisionId: decision.id,
+          title: decision.review.title,
+          reviewSummary: decision.review.summary,
+          correction: intervention.text,
+          progress: intervention.progress,
+          subsequentStepIds: intervention.subsequentStepIds,
+        },
+      ]
+    })
+    if (!corrections.length) return '\n当前没有尚待验证的纠正记录。'
+    return `\n尚未取得针对性证据的历史纠正如下。原动作已经结束，不得重放或直接放行；请先读取当前文件，依据当前有效要求逐项检查成品。发现问题时自行声明新工作单元并修复，验证必须记录真实观察结果，不能把普通静态检查当成功能证据：\n${JSON.stringify(corrections)}`
+  }
+
   addInput(input: AdditionInput) {
     const prior = this.state.interventions.find((i) => i.requestId === input.requestId)
     if (prior) return prior
@@ -1121,6 +1438,7 @@ export class DecisionRuntime {
         revision: this.state.revision,
         active: true,
       })
+      this.refreshTargetedEvidence()
     }
     const intervention: Intervention = {
       id: randomUUID(),
@@ -1225,6 +1543,7 @@ export class DecisionRuntime {
         revision: this.state.revision,
         active: true,
       })
+      this.refreshTargetedEvidence()
     }
     const intervention: Intervention = {
       id: randomUUID(),

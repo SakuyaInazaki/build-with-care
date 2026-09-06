@@ -1,0 +1,55 @@
+<template>
+<div data-hf-id="hf-52si" id="f10-artifact" data-composition-id="f10-artifact" data-start="0" data-width="1920" data-height="1080" data-duration="7.5">
+  <style>
+    @font-face { font-family:'PingFang SC'; src: local('PingFang SC'); }
+    @font-face { font-family:'PingFang SC'; font-weight:600; src: local('PingFang SC Semibold'); }
+    #f10-artifact {
+      position:relative; width:1920px; height:1080px; overflow:hidden; background:#EDE9E1;
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #f10-artifact .clip { position:absolute; inset:0; }
+    #f10-artifact .ground { position:absolute; inset:0;
+      background: radial-gradient(100% 76% at 50% 2%, #FDFCF9 0%, #F6F3EC 40%, #EBE6DC 74%, #E0DACD 100%);
+    }
+    #f10-artifact .floor { position:absolute; left:0; right:0; bottom:0; height:400px;
+      background: linear-gradient(to bottom, rgba(158,148,130,0), rgba(146,136,118,.18)); }
+    #f10-artifact .kick { position:absolute; font-size:22px; letter-spacing:.32em; color:#A86A3C; font-weight:500; }
+    #f10-artifact .h1 { position:absolute; font-size:58px; font-weight:600; letter-spacing:-.03em; line-height:1.26; color:#212823; }
+    #f10-artifact .tail { position:absolute; font-size:34px; font-weight:400; letter-spacing:-.01em; color:#6B7268; line-height:1.5; }
+    #f10-artifact .sheet { position:absolute; border-radius:22px; overflow:hidden; background:#fff;
+      box-shadow: 0 3px 9px rgba(34,40,36,.06), 0 22px 44px -12px rgba(34,40,36,.16), 0 72px 130px -38px rgba(34,40,36,.28); }
+    #f10-artifact .sheet img { position:absolute; height:auto; }
+    #f10-artifact .rim { position:absolute; inset:0; border-radius:22px; pointer-events:none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.75); }
+    #f10-artifact .art { left:-160px; top:112px; width:1560px; height:844px; }
+    #f10-artifact .art img { left:0; top:0; width:1560px; }
+    #f10-artifact .kick { left:1442px; top:450px; }
+    #f10-artifact .h1   { left:1442px; top:498px; width:330px; font-size:44px; }
+    #f10-artifact .tail { left:1442px; top:672px; width:400px; font-size:25px; line-height:1.66; }  </style>
+  <section data-hf-id="hf-xubk" id="f10-artifact-stage" class="clip" data-start="0" data-duration="7.5">
+    <div data-hf-id="hf-ygft" class="ground"></div>
+    <div data-hf-id="hf-ejp0" class="sheet art" id="f10-artifact-art"><img data-hf-id="hf-91jj" src="assets/crop-artifacts.png" alt=""><div data-hf-id="hf-5gs0" class="rim"></div></div>
+    <div data-hf-id="hf-ip5t" class="kick" id="f10-artifact-k">成果与验证</div>
+    <div data-hf-id="hf-lux4" class="tail" id="f10-artifact-t">产物一改动，原来的验证立刻失效，必须重新检查。</div>
+    <div data-hf-id="hf-i94n" class="h1" id="f10-artifact-h">产物就在这里，能直接打开。</div>
+    <div data-hf-id="hf-kk9u" class="floor"></div>
+  </section>
+</div>
+<script>
+  (function () {
+    var tl = gsap.timeline({ paused: true });
+    // one continuous decelerating pull-back — frontal throughout, no rotation
+    tl.fromTo("#f10-artifact-art",
+      { scale:1.55, transformOrigin:"78% 34%", autoAlpha:0 },
+      { scale:1.55, autoAlpha:1, duration:.6, ease:"power2.out" }, 0);
+    tl.to("#f10-artifact-art", { scale:1, duration:2.6, ease:"power3.out" }, .8);
+    tl.fromTo("#f10-artifact-k", { y:12, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.6, ease:"power3.out" }, 3.5);
+    tl.fromTo("#f10-artifact-h", { y:22, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.85, ease:"power3.out" }, 3.65);
+    tl.fromTo("#f10-artifact-t", { y:16, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.8, ease:"power3.out" }, 4.5);
+    // 4.5s → 7s : held still so the artifact can actually be looked at
+    tl.to({}, { duration: 7 }, 0);
+    window.__timelines["f10-artifact"] = tl;
+  })();
+</script>
+</template>

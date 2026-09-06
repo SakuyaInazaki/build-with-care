@@ -8,6 +8,7 @@ import { Workspace } from './workspace.js'
 import { complete } from './models.js'
 import { settingsPatchSchema } from './settings-store.js'
 import { eventDetails } from './event-details.js'
+import { publicDemoEnabled } from './public-demo.js'
 
 const verdictSchema = z.object({
   requestId: z.string().uuid(),
@@ -28,7 +29,24 @@ const verdictSchema = z.object({
   text: z.string().trim().max(2000).optional(),
   replaceConstraintId: z.string().uuid().optional(),
 })
-export function createApp(manager: Manager) {
+// Local runs stay locked to loopback. A public deployment names its own origin through
+// ALLOWED_HOSTS (comma separated host[:port]); nothing else is ever accepted.
+const allowedHosts = (process.env.ALLOWED_HOSTS ?? '')
+  .split(',')
+  .map((entry) => entry.trim().toLowerCase())
+  .filter(Boolean)
+const loopbackHost = /^(localhost|127\.0\.0\.1)(:\d+)?$/
+export const hostAllowed = (host: string) =>
+  loopbackHost.test(host) || allowedHosts.includes(host.toLowerCase())
+const originAllowed = (origin: string, host: string) => {
+  try {
+    const parsed = new URL(origin)
+    return parsed.host.toLowerCase() === host.toLowerCase()
+  } catch {
+    return false
+  }
+}
+export function createApp(manager: Manager, guard?: express.RequestHandler) {
   const app = express()
   let token = randomBytes(32).toString('hex'),
     tokenExpiresAt = Date.now() + 86400000
@@ -40,12 +58,12 @@ export function createApp(manager: Manager) {
   app.use(express.json({ limit: '1mb' }))
   app.use(['/api', '/artifacts'], (req, res, next) => {
     const host = req.get('host') ?? ''
-    if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) {
+    if (!hostAllowed(host)) {
       res.status(403).json({ error: '只允许本地访问' })
       return
     }
     const origin = req.get('origin')
-    if (origin && origin !== `http://${host}`) {
+    if (origin && !originAllowed(origin, host)) {
       res.status(403).json({ error: '请求来源不匹配' })
       return
     }
@@ -71,6 +89,7 @@ export function createApp(manager: Manager) {
     }
     next()
   })
+  if (guard) app.use('/api', guard)
   app.get('/api/bootstrap', (_req, res) => {
     if (Date.now() >= tokenExpiresAt) renewToken()
     res.cookie('decision_session', token, {
@@ -83,7 +102,12 @@ export function createApp(manager: Manager) {
       settings: manager.publicSettings(),
       runs: manager.list(),
       backendVersion: 'unified-work-units-v4',
-      capabilities: ['task-archive-v1', 'grill-batch-v1'],
+      // 只读展示站没有模型也不接受写操作，前端据此隐藏创建任务与模型配置入口。
+      capabilities: [
+        'task-archive-v1',
+        'grill-batch-v1',
+        ...(publicDemoEnabled ? ['read-only-v1'] : []),
+      ],
       runtime: 'dsh 0.1.2-rc.1',
     })
   })

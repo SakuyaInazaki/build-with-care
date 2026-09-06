@@ -76,7 +76,7 @@ export interface Intervention {
   fromRevision: number
   toRevision: number
   createdAt: string
-  progress: 'recorded' | 'delivered' | 'acted' | 'verified'
+  progress: 'recorded' | 'delivered' | 'acted' | 'verified' | 'superseded'
   subsequentStepIds: string[]
 }
 export interface AdditionInput {
@@ -97,6 +97,53 @@ export interface Verification {
   detail: string
   createdAt: string
   revision?: number
+}
+export interface BehaviorEvidenceResult {
+  status: 'passed' | 'failed' | 'inconclusive'
+  reason?: string
+  browser?: string
+  revision: number
+  entry: { path: string; hash: string }
+  loadedArtifacts: { path: string; hash: string }[]
+  actions: { index: number; kind: string; outcome: 'done' }[]
+  observations: { checkpoint: string; name: string; kind: string; value: unknown }[]
+  assertions: {
+    name: string
+    operator: string
+    passed: boolean
+    actual: unknown
+    expected: unknown
+  }[]
+  diagnostics: {
+    consoleErrors: string[]
+    pageErrors: string[]
+    requestFailures: string[]
+    blockedRequests: string[]
+  }
+}
+export interface BehaviorVerification {
+  id: string
+  stepId: string
+  interventionId: string
+  decisionId: string
+  path: string
+  revision: number
+  review: Review
+  result: BehaviorEvidenceResult
+  stale: boolean
+  createdAt: string
+}
+export interface CorrectionResolution {
+  id: string
+  stepId: string
+  interventionId: string
+  decisionId: string
+  revision: number
+  supersedingConstraintIds: string[]
+  reason: string
+  review: Review
+  stale: boolean
+  createdAt: string
 }
 export interface AppEvent {
   id: string
@@ -124,6 +171,8 @@ export interface RunState {
   gates: Gate[]
   interventions: Intervention[]
   verifications: Verification[]
+  behaviorVerifications?: BehaviorVerification[]
+  correctionResolutions?: CorrectionResolution[]
   messages: { id: string; role: 'agent' | 'system'; text: string; at: string }[]
   files: { path: string; hash: string; bytes: number }[]
   reflection: string

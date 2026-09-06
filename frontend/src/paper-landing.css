@@ -8,6 +8,22 @@
   isolation: isolate;
   color: var(--paper-ink);
   background: var(--paper);
+  opacity: 1;
+  transition: opacity 400ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+html.paper-landing-active .app-shell {
+  opacity: 0.82;
+  transform: scale(0.992);
+  transform-origin: 50% 48%;
+}
+
+html.paper-landing-active.paper-landing-transitioning .app-shell {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity 340ms ease-out,
+    transform 420ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .paper-landing--prelude {
@@ -222,55 +238,32 @@
   white-space: nowrap;
 }
 
-.paper-landing__departure {
-  position: absolute;
-  z-index: 4;
-  inset: 0;
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-  background: hsl(240 10% 97%);
-}
-
 .attention-prompt.landing-attention {
   z-index: 70;
 }
 
-.paper-landing.is-leaving .paper-landing__departure {
-  visibility: visible;
-  pointer-events: auto;
-  animation: paper-depart 680ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+.paper-landing.is-leaving {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .paper-landing.is-leaving .paper-landing__canvas,
 .paper-landing.is-leaving .paper-landing__fallback {
-  opacity: 0.15 !important;
-  transform: scale(0.97);
+  opacity: 0.32 !important;
+  transform: scale(0.985);
   transition:
-    transform 650ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 550ms ease;
+    transform 400ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 280ms ease-out;
 }
 
 .paper-landing.is-leaving .paper-landing__fallback {
-  transform: translate(-50%, -50%) scale(0.97);
+  transform: translate(-50%, -50%) scale(0.985);
 }
 
 .paper-landing.is-leaving .paper-landing__entry {
   opacity: 0;
   pointer-events: none;
   transition: opacity 180ms ease;
-}
-
-@keyframes paper-depart {
-  0% {
-    opacity: 0;
-  }
-  20% {
-    opacity: 0.04;
-  }
-  100% {
-    opacity: 1;
-  }
 }
 
 @media (max-width: 600px) {
@@ -325,6 +318,13 @@
 
   .paper-landing.is-leaving {
     opacity: 0;
+  }
+
+  html.paper-landing-active .app-shell,
+  html.paper-landing-active.paper-landing-transitioning .app-shell {
+    opacity: 1;
+    transform: none;
+    transition: none;
   }
 }
 

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080">
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #000;
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #F3EFE6;
+      }
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div data-hf-id="hf-42vy" id="root" data-composition-id="main" data-start="0" data-duration="97" data-width="1920" data-height="1080">
+      <div data-hf-id="hf-u1cu" id="el-f01-one-sentence" class="scene" data-composition-id="f01-one-sentence" data-composition-src="compositions/frames/f01-one-sentence.html" data-start="0" data-duration="8.5" data-track-index="0"></div>
+
+      <div data-hf-id="hf-9v7t" id="el-f02-four-states" class="scene" data-composition-id="f02-four-states" data-composition-src="compositions/frames/f02-four-states.html" data-start="8" data-duration="9.4" data-track-index="1"></div>
+
+      <div data-hf-id="hf-e91r" id="el-f03-brand" class="scene" data-composition-id="f03-brand" data-composition-src="compositions/frames/f03-brand.html" data-start="17" data-duration="7.6" data-track-index="0"></div>
+
+      <div data-hf-id="hf-rq9l" id="el-f04-stack" class="scene" data-composition-id="f04-stack" data-composition-src="compositions/frames/f04-stack.html" data-start="24" data-duration="12.5" data-track-index="1"></div>
+
+      <div data-hf-id="hf-89pq" id="el-f05-it-works" class="scene" data-composition-id="f05-it-works" data-composition-src="compositions/frames/f05-it-works.html" data-start="36" data-duration="7.5" data-track-index="0"></div>
+
+      <div data-hf-id="hf-tt49" id="el-f06-reconcile" class="scene" data-composition-id="f06-reconcile" data-composition-src="compositions/frames/f06-reconcile.html" data-start="43" data-duration="11.5" data-track-index="1"></div>
+
+      <div data-hf-id="hf-ik6u" id="el-f07-blocked" class="scene" data-composition-id="f07-blocked" data-composition-src="compositions/frames/f07-blocked.html" data-start="54" data-duration="7.5" data-track-index="0"></div>
+
+      <div data-hf-id="hf-uoqw" id="el-f08-four-actions" class="scene" data-composition-id="f08-four-actions" data-composition-src="compositions/frames/f08-four-actions.html" data-start="61" data-duration="8.4" data-track-index="1"></div>
+
+      <div data-hf-id="hf-rjxv" id="el-f09-evidence" class="scene" data-composition-id="f09-evidence" data-composition-src="compositions/frames/f09-evidence.html" data-start="69" data-duration="7.5" data-track-index="0"></div>
+
+      <div data-hf-id="hf-i44j" id="el-f10-artifact" class="scene" data-composition-id="f10-artifact" data-composition-src="compositions/frames/f10-artifact.html" data-start="76" data-duration="7.5" data-track-index="1"></div>
+
+      <div data-hf-id="hf-z6bd" id="el-f11-your-judgement" class="scene" data-composition-id="f11-your-judgement" data-composition-src="compositions/frames/f11-your-judgement.html" data-start="83" data-duration="9.4" data-track-index="0"></div>
+
+      <div data-hf-id="hf-a64f" id="el-f12-outro" class="scene" data-composition-id="f12-outro" data-composition-src="compositions/frames/f12-outro.html" data-start="92" data-duration="5" data-track-index="1"></div>
+
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+      // ── frame transitions (injected by transitions.mjs) ──
+      (function () { var tl = window.__timelines["main"];
+        tl.to("#el-f01-one-sentence", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 8);
+        tl.fromTo("#el-f02-four-states", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 8);
+        tl.to("#el-f02-four-states", { scale: 2.5, opacity: 0, filter: "blur(8px)", duration: 0.4, ease: "power3.in" }, 17);
+        tl.fromTo("#el-f03-brand", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.4, ease: "power3.out" }, 17);
+        tl.to("#el-f03-brand", { filter: "blur(10px)", scale: 1.03, opacity: 0, duration: 0.6, ease: "power2.inOut" }, 24);
+        tl.fromTo("#el-f04-stack", { filter: "blur(10px)", scale: 0.97, opacity: 0 }, { filter: "blur(0px)", scale: 1, opacity: 1, duration: 0.6, ease: "power2.inOut" }, 24);
+        tl.to("#el-f04-stack", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 36);
+        tl.fromTo("#el-f05-it-works", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 36);
+        tl.to("#el-f05-it-works", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 43);
+        tl.fromTo("#el-f06-reconcile", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 43);
+        tl.to("#el-f06-reconcile", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 54);
+        tl.fromTo("#el-f07-blocked", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 54);
+        tl.to("#el-f07-blocked", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 61);
+        tl.fromTo("#el-f08-four-actions", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 61);
+        tl.to("#el-f08-four-actions", { scale: 2.5, opacity: 0, filter: "blur(8px)", duration: 0.4, ease: "power3.in" }, 69);
+        tl.fromTo("#el-f09-evidence", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.4, ease: "power3.out" }, 69);
+        tl.to("#el-f09-evidence", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 76);
+        tl.fromTo("#el-f10-artifact", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 76);
+        tl.to("#el-f10-artifact", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 83);
+        tl.fromTo("#el-f11-your-judgement", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 83);
+        tl.to("#el-f11-your-judgement", { scale: 2.5, opacity: 0, filter: "blur(8px)", duration: 0.4, ease: "power3.in" }, 92);
+        tl.fromTo("#el-f12-outro", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.4, ease: "power3.out" }, 92);
+        tl.to({}, { duration: 97 }, 0); // full-span anchor — main.duration() == composition total (Studio master duration)
+      })();
+    </script>
+  </body>
+</html>

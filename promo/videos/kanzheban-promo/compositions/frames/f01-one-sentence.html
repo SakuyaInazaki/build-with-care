@@ -1,0 +1,63 @@
+<template>
+<div data-hf-id="hf-jwm9" id="f01-one-sentence" data-composition-id="f01-one-sentence" data-start="0" data-width="1920" data-height="1080" data-duration="8.5">
+  <style>
+    @font-face { font-family:'PingFang SC'; src: local('PingFang SC'); }
+    @font-face { font-family:'PingFang SC'; font-weight:600; src: local('PingFang SC Semibold'); }
+    #f01-one-sentence {
+      position:relative; width:1920px; height:1080px; overflow:hidden;
+      background:#0C100F;
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #f01-one-sentence .clip { position:absolute; inset:0; }
+    /* lit ground: a soft key from upper-left, a cool fill from lower-right, then a vignette */
+    #f01-one-sentence .ground {
+      position:absolute; inset:0;
+      background:
+        radial-gradient(120% 90% at 22% 8%,  #2A3733 0%, #1B2422 38%, #101615 68%, #0B0F0E 100%),
+        radial-gradient(70% 60% at 88% 96%, rgba(168,106,60,.10) 0%, rgba(168,106,60,0) 62%);
+    }
+    #f01-one-sentence .vig {
+      position:absolute; inset:0;
+      background: radial-gradient(78% 66% at 42% 40%, rgba(0,0,0,0) 40%, rgba(0,0,0,.42) 100%);
+    }
+    #f01-one-sentence .stack { position:absolute; left:150px; top:274px; width:1420px; }
+    #f01-one-sentence .ln {
+      display:block; font-size:118px; font-weight:600; line-height:1.30;
+      letter-spacing:-.035em; color:#F4F1EA; white-space:nowrap;
+    }
+    #f01-one-sentence .ln.b { font-size:104px; }
+    #f01-one-sentence .ln.c { font-size:88px; }
+    /* the thin warm rule that will become the product's hairline language */
+    #f01-one-sentence .rule { position:absolute; left:150px; top:214px; width:132px; height:2px; background:#A86A3C; }
+  </style>
+  <section data-hf-id="hf-3loy" id="f01-stage" class="clip" data-start="0" data-duration="8.5">
+    <div data-hf-id="hf-ygft" class="ground"></div>
+    <div data-hf-id="hf-e4a6" class="vig"></div>
+    <div data-hf-id="hf-930q" class="rule" id="f01-rule"></div>
+    <div data-hf-id="hf-d1zs" class="stack">
+      <span data-hf-id="hf-ibvp" class="ln a" id="f01-l1">你说了一句话。</span>
+      <span data-hf-id="hf-4ysa" class="ln b" id="f01-l2">它改了一整个文件。</span>
+      <span data-hf-id="hf-0bpj" class="ln c" id="f01-l3">中间那些决定，你一个都没看见。</span>
+    </div>
+  </section>
+</div>
+<script>
+  (function () {
+    var tl = gsap.timeline({ paused: true });
+    tl.fromTo("#f01-rule", { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: .9, ease: "power3.out" }, 0.15);
+
+    tl.fromTo("#f01-l1", { y: 34, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .95, ease: "power3.out" }, 0.35);
+
+    tl.fromTo("#f01-l2", { y: 34, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .95, ease: "power3.out" }, 2.65);
+    tl.to("#f01-l1", { color: "#5E6D68", duration: .7, ease: "power2.out" }, 2.65);
+
+    tl.fromTo("#f01-l3", { y: 34, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .95, ease: "power3.out" }, 5.25);
+    tl.to("#f01-l2", { color: "#5E6D68", duration: .7, ease: "power2.out" }, 5.25);
+    tl.to("#f01-l1", { color: "#3D4A46", duration: .7, ease: "power2.out" }, 5.25);
+
+    tl.to({}, { duration: 8 }, 0);
+    window.__timelines["f01-one-sentence"] = tl;
+  })();
+</script>
+</template>

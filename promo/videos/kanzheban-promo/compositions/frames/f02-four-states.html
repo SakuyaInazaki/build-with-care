@@ -1,0 +1,78 @@
+<template>
+<div data-hf-id="hf-z4uy" id="f02-four-states" data-composition-id="f02-four-states" data-start="0" data-width="1920" data-height="1080" data-duration="9.4">
+  <style>
+    @font-face { font-family:'PingFang SC'; src: local('PingFang SC'); }
+    @font-face { font-family:'PingFang SC'; font-weight:600; src: local('PingFang SC Semibold'); }
+    #f02-four-states {
+      position:relative; width:1920px; height:1080px; overflow:hidden; background:#080B0A;
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #f02-four-states .clip { position:absolute; inset:0; }
+    #f02-four-states .ground {
+      position:absolute; inset:0;
+      background:
+        radial-gradient(115% 92% at 50% 2%, #22302A 0%, #16201C 34%, #0D1211 66%, #080B0A 100%);
+    }
+    #f02-four-states .vig { position:absolute; inset:0;
+      background: radial-gradient(84% 74% at 50% 46%, rgba(0,0,0,0) 46%, rgba(0,0,0,.5) 100%); }
+
+    #f02-four-states .kick { position:absolute; left:118px; top:110px; font-size:22px; letter-spacing:.32em; color:#A86A3C; font-weight:500; }
+    #f02-four-states .h1 { position:absolute; left:118px; top:158px; width:1500px;
+      font-size:60px; font-weight:600; letter-spacing:-.03em; line-height:1.24; color:#F4F1EA; }
+
+    /* the real, empty board — the product's own four states, carrying no task's content */
+    #f02-four-states .boardwrap { position:absolute; left:160px; top:322px; width:1600px; height:648px; }
+    #f02-four-states .lane { position:absolute; top:0; height:648px; overflow:hidden; border-radius:16px; }
+    #f02-four-states .lane img { position:absolute; top:0; width:1600px; height:auto; }
+    #f02-four-states .l1 { left:0px;   width:387px; }  #f02-four-states .l1 img { left:0px; }
+    #f02-four-states .l2 { left:403px; width:388px; }  #f02-four-states .l2 img { left:-403px; }
+    #f02-four-states .l3 { left:807px; width:388px; }  #f02-four-states .l3 img { left:-807px; }
+    #f02-four-states .l4 { left:1211px;width:389px; }  #f02-four-states .l4 img { left:-1211px; }
+
+
+    #f02-four-states .tail {
+      position:absolute; left:118px; top:1000px; width:1500px;
+      font-size:34px; font-weight:400; color:#95A29B; letter-spacing:-.01em;
+    }
+  </style>
+  <section data-hf-id="hf-0fx8" id="f02-stage" class="clip" data-start="0" data-duration="9.4">
+    <div data-hf-id="hf-ygft" class="ground"></div>
+
+    <div data-hf-id="hf-a8vo" class="boardwrap">
+      <div data-hf-id="hf-db1x" class="lane l1" id="f02-L1"><img data-hf-id="hf-46j9" src="assets/product-board-empty.png" alt=""></div>
+      <div data-hf-id="hf-tltp" class="lane l2" id="f02-L2"><img data-hf-id="hf-97wp" src="assets/product-board-empty.png" alt=""></div>
+      <div data-hf-id="hf-ok1d" class="lane l3" id="f02-L3"><img data-hf-id="hf-aets" src="assets/product-board-empty.png" alt=""></div>
+      <div data-hf-id="hf-61k1" class="lane l4" id="f02-L4"><img data-hf-id="hf-a0ir" src="assets/product-board-empty.png" alt=""></div>
+
+      <div data-hf-id="hf-hzyb" class="tag t1" id="f02-T1">需要你判断</div>
+      <div data-hf-id="hf-3jrl" class="tag t2" id="f02-T2">正在推进</div>
+      <div data-hf-id="hf-0oha" class="tag t3" id="f02-T3">等待验证</div>
+      <div data-hf-id="hf-y07s" class="tag t4" id="f02-T4">已验证</div>
+    </div>
+
+    <div data-hf-id="hf-e4a6" class="vig"></div>
+    <div data-hf-id="hf-z9a4" class="kick" id="f02-kick">决策看板</div>
+    <div data-hf-id="hf-52ry" class="h1" id="f02-h1">Agent 的每一个决定，都落进四种状态。</div>
+    <div data-hf-id="hf-6tc0" class="tail" id="f02-tail">没有人处理的那一栏，它就停在那里。</div>
+  </section>
+</div>
+<script>
+  (function () {
+    var tl = gsap.timeline({ paused: true });
+    var L = ["#f02-L1", "#f02-L2", "#f02-L3", "#f02-L4"];
+
+    tl.fromTo("#f02-kick", { y: 12, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .6, ease: "power3.out" }, 0.1);
+    tl.fromTo("#f02-h1",   { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .95, ease: "power3.out" }, 0.25);
+
+    for (var i = 0; i < 4; i += 1) {
+      var t = 1.5 + i * 1.05;
+      tl.fromTo(L[i], { y: 46, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .95, ease: "power3.out" }, t);
+    }
+
+    tl.fromTo("#f02-tail", { y: 18, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .8, ease: "power3.out" }, 6.4);
+    tl.to({}, { duration: 9 }, 0);
+    window.__timelines["f02-four-states"] = tl;
+  })();
+</script>
+</template>

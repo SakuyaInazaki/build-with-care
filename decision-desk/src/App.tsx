@@ -75,6 +75,7 @@ const progressLabel = {
   delivered: '已进入执行上下文',
   acted: '已产生后续改动',
   verified: '对应静态检查已通过',
+  superseded: '已被后续要求取代',
 }
 const actionLabel = {
   correct: '调整做法',

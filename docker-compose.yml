@@ -1,0 +1,39 @@
+# 一条命令起全站：docker compose up -d --build
+# 公网演示站请先在 .env.deploy 里写好 PUBLIC_HOST（域名或 IP:端口），否则接口会以 403 拒绝跨主机访问。
+services:
+  kanzheban:
+    build:
+      context: .
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+    image: kanzheban:latest
+    container_name: kanzheban
+    restart: unless-stopped
+    ports:
+      - '${PUBLIC_PORT:-8080}:4317'
+    # Chromium 在默认 64MB 的 /dev/shm 上会崩，行为验证需要更大的共享内存。
+    shm_size: '512mb'
+    environment:
+      HOST: 0.0.0.0
+      PORT: '4317'
+      DATA_DIR: /data/runs
+      # 只有这里列出的 Host 能调用 /api；留空即只允许 127.0.0.1。
+      ALLOWED_HOSTS: ${PUBLIC_HOST:-}
+      # 公开演示站护栏：禁改模型配置、禁真实模型执行、禁删他人记录、限流。
+      PUBLIC_DEMO: ${PUBLIC_DEMO:-1}
+      # 预置展示记录：真实模型跑出来的会话，不参与清理、只读。
+      PUBLIC_DEMO_PINNED: ${PUBLIC_DEMO_PINNED:-}
+      DOWNLOAD_DIR: /downloads
+      CHROME_PATH: /usr/bin/chromium
+      CHROME_ARGS: '--no-sandbox --disable-dev-shm-usage'
+    volumes:
+      - kanzheban-data:/data
+      # 离线包放在宿主机上，镜像里不带，换版本不需要重新构建。
+      - ./downloads:/downloads:ro
+    # 2C2G 的机器上留出余量给构建与 Chromium。
+    deploy:
+      resources:
+        limits:
+          memory: 1400M
+volumes:
+  kanzheban-data:

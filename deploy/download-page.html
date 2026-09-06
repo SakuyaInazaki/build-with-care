@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>看着办 · 离线包下载</title>
+    <style>
+      :root {
+        --ink: #20392e;
+        --muted: #66776d;
+        --line: #dcdcd3;
+        --paper: #f4f3ed;
+        --card: #fffefa;
+        --accent: #274e3a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 64px 24px 96px;
+        background: var(--paper);
+        color: var(--ink);
+        font: 15px/1.75 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+      main { max-width: 720px; margin: 0 auto; }
+      .eyebrow { font-size: 13px; letter-spacing: 2px; color: var(--muted); }
+      h1 {
+        font-family: Georgia, "Songti SC", "SimSun", serif;
+        font-size: 44px;
+        line-height: 1.2;
+        margin: 14px 0 18px;
+        font-weight: 500;
+      }
+      .lede { color: var(--muted); margin: 0 0 40px; max-width: 34em; }
+      .lede strong { color: var(--ink); font-weight: 600; }
+      h2 { font-size: 15px; margin: 44px 0 14px; letter-spacing: .5px; }
+      ul.list { padding-left: 1.2em; color: var(--muted); margin: 0; }
+      ul.list li { margin-bottom: 7px; }
+      ul.list strong { color: var(--ink); }
+      a.dl {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 17px 20px;
+        margin-bottom: 11px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        text-decoration: none;
+        color: inherit;
+        transition: border-color .15s, transform .15s;
+      }
+      a.dl:hover { border-color: var(--accent); transform: translateY(-1px); }
+      .dl .name { font-weight: 600; }
+      .dl .meta { font-size: 13px; color: var(--muted); }
+      .dl .grow { flex: 1; }
+      .dl .size { font-size: 13px; color: var(--muted); white-space: nowrap; }
+      .dl .arrow { color: var(--accent); font-size: 18px; }
+      details { margin-top: 12px; }
+      summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+      pre {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 13px 15px;
+        overflow-x: auto;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      footer {
+        margin-top: 56px;
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+        font-size: 13px;
+        color: var(--muted);
+      }
+      footer a { color: var(--accent); }
+      .hint { color: var(--muted); margin: 0 0 10px; }
+      .prompt { position: relative; margin-bottom: 16px; }
+      .prompt pre {
+        margin: 0;
+        padding: 16px 18px;
+        padding-right: 84px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.7;
+        color: var(--ink);
+        font-size: 12.5px;
+      }
+      .copy {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        color: var(--accent);
+        border-radius: 7px;
+        padding: 5px 11px;
+        font: 12px/1 system-ui, -apple-system, "PingFang SC", sans-serif;
+        cursor: pointer;
+      }
+      .copy:hover { border-color: var(--accent); }
+      .copy.done { color: #fff; background: var(--accent); border-color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">BUILD WITH CARE</p>
+      <h1>把工作台<br />带回自己的机器。</h1>
+      <p class="lede">
+        线上这份是<strong>只读展示</strong>，能翻看真实跑出来的会话记录，但不能自己跑任务。
+        想接自己的模型、完整走一遍决策流，就下载离线包。<strong>解压双击即可。</strong>
+      </p>
+
+      <h2>选择你的系统</h2>
+      <a class="dl" href="kanzheban-v1.0.0-windows-x64.zip" download>
+        <span class="grow"><span class="name">Windows</span><br /><span class="meta">64 位 · 双击 start.cmd</span></span>
+        <span class="size">48 MB</span><span class="arrow">↓</span>
+      </a>
+      <a class="dl" href="kanzheban-v1.0.0-macos-arm64.zip" download>
+        <span class="grow"><span class="name">macOS · Apple 芯片</span><br /><span class="meta">M1 及以后 · 双击 启动.command</span></span>
+        <span class="size">53 MB</span><span class="arrow">↓</span>
+      </a>
+      <a class="dl" href="kanzheban-v1.0.0-macos-intel.zip" download>
+        <span class="grow"><span class="name">macOS · Intel</span><br /><span class="meta">双击 启动.command</span></span>
+        <span class="size">54 MB</span><span class="arrow">↓</span>
+      </a>
+      <a class="dl" href="kanzheban-v1.0.0-linux-x64.zip" download>
+        <span class="grow"><span class="name">Linux</span><br /><span class="meta">x86_64 · 终端执行 ./start.sh</span></span>
+        <span class="size">58 MB</span><span class="arrow">↓</span>
+      </a>
+      <details>
+        <summary>校验完整性（SHA-256）</summary>
+        <pre>ecae78d913864f7ad0435e135ea13df49e448017e708acaa2a513608f3c683a6  kanzheban-v1.0.0-windows-x64.zip
+59125b8e346eda15edb0c3b7ef5ecf2187d83ebe014dc49b65ee048845d4033f  kanzheban-v1.0.0-macos-arm64.zip
+faf0ab62d8f3a520ae2051494e1372954f973b77b55e94908500af7c8592dbff  kanzheban-v1.0.0-macos-intel.zip
+7bcdaf7850b4b33fa2737a0260f92dc799a9c2c6f1a9098c8f516755ac5d4bf9  kanzheban-v1.0.0-linux-x64.zip</pre>
+      </details>
+
+      <h2>运行之后</h2>
+      <ul class="list">
+        <li>浏览器会自动打开 <code>http://127.0.0.1:4317</code>。</li>
+        <li><strong>演示模式</strong>开箱即用，不调用任何模型，四色决策卡、双栏对账、时间线回放、一页报告都是真实产生的。</li>
+        <li><strong>真实模型模式</strong>需要自己的密钥：把 <code>app/decision-desk/.env.example</code> 复制成 <code>.env</code> 填入，或在界面「模型与设置」里填。</li>
+        <li>所有会话记录只写在本地目录，不上传任何地方。</li>
+      </ul>
+
+      <h2>推荐：让你自己的 coding agent 适配环境</h2>
+      <p class="lede" style="margin-bottom:14px">
+        这个包只保证「解压能跑」，但每个人的环境不一样——端口被占、公司代理、模型端点不是
+        DeepSeek、浏览器装在非默认路径、想改成开机自启。
+        <strong>最省事的办法是把解压出来的文件夹直接交给你自己的 coding agent</strong>，
+        让它照着 <code>readme.md</code>／<code>使用说明.md</code> 和 <code>app/decision-desk/.env.example</code>
+        针对你的机器做适配。代码是可读的 JavaScript，没有打包混淆，agent 改起来没有障碍。
+      </p>
+      <p class="hint">把下面这段连同解压出来的文件夹一起交给它：</p>
+      <div class="prompt">
+        <button type="button" class="copy" data-target="agent-prompt">复制</button>
+        <pre id="agent-prompt">这是「看着办」Agent 工作台的离线包，已经解压在当前目录。请帮我在这台机器上跑起来：
+
+1. 按 readme.md（或 使用说明.md）里的方式启动，运行时就在包内 runtime/ 目录，不要用系统里的 Node。
+2. 如果 4317 端口被占用，改用别的端口（环境变量 PORT）。
+3. 行为验证需要 Chrome / Chromium / Edge。先确认本机装在哪，装在非默认路径就用环境变量 CHROME_PATH 指过去。
+4. 把 app/decision-desk/.env.example 复制成 app/decision-desk/.env，接上我的模型：需要 worker（执行）和 reviewer（独立审查）两个角色，走 OpenAI 兼容的 Chat Completions 接口。密钥我会告诉你，别写进任何会提交的文件。
+5. 起来之后打开浏览器确认能新建任务并跑完一轮，有报错就直接排查。</pre>
+      </div>
+
+      <h2>一件要先知道的事</h2>
+      <ul class="list">
+        <li><strong>行为验证需要浏览器。</strong>绿卡的证据来自真实浏览器里的行为检查，程序会自动找本机的 Chrome／Chromium／Edge，装在别处可用 <code>CHROME_PATH</code> 指定。找不到时会明确报告「没有可用浏览器」。</li>
+      </ul>
+
+      <footer>
+        <a href="/?workspace=1">← 回到展示站</a>
+      </footer>
+    </main>
+    <script>
+      // 这个页面走 http，navigator.clipboard 在非安全上下文里不可用，所以保留 execCommand 兜底。
+      document.querySelectorAll('.copy').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const text = document.getElementById(button.dataset.target).textContent
+          let ok = false
+          try {
+            if (navigator.clipboard && window.isSecureContext) {
+              await navigator.clipboard.writeText(text)
+              ok = true
+            }
+          } catch (error) {
+            ok = false
+          }
+          if (!ok) {
+            const area = document.createElement('textarea')
+            area.value = text
+            area.style.position = 'fixed'
+            area.style.opacity = '0'
+            document.body.appendChild(area)
+            area.select()
+            try {
+              ok = document.execCommand('copy')
+            } catch (error) {
+              ok = false
+            }
+            area.remove()
+          }
+          button.textContent = ok ? '已复制' : '请手动选择复制'
+          button.classList.toggle('done', ok)
+          setTimeout(() => {
+            button.textContent = '复制'
+            button.classList.remove('done')
+          }, 2000)
+        })
+      })
+    </script>
+  </body>
+</html>

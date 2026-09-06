@@ -1,0 +1,87 @@
+<template>
+<div data-hf-id="hf-qd5i" id="f03-brand" data-composition-id="f03-brand" data-start="0" data-width="1920" data-height="1080" data-duration="7.6">
+  <style>
+    @font-face { font-family:'PingFang SC'; src: local('PingFang SC'); }
+    @font-face { font-family:'PingFang SC'; font-weight:600; src: local('PingFang SC Semibold'); }
+    /* the welcome page's own serif — the product sets Latin in Iowan Old Style, not in the UI sans */
+    @font-face { font-family:'Iowan Old Style'; src: local('Iowan Old Style'); }
+    @font-face { font-family:'Palatino'; src: local('Palatino'); }
+    #f03-brand {
+      position:relative; width:1920px; height:1080px; overflow:hidden; background:#F3EFE6;
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #f03-brand .clip { position:absolute; inset:0; }
+    /* the product's paper ground, lit — a warm key from above, the sheet falling off at the edges */
+    #f03-brand .ground {
+      position:absolute; inset:0;
+      background:
+        radial-gradient(96% 78% at 50% 0%, #FBF8F1 0%, #F5F1E7 40%, #EDE7D9 76%, #E4DCCA 100%);
+    }
+    #f03-brand .vig { position:absolute; inset:0;
+      background: radial-gradient(78% 70% at 50% 44%, rgba(0,0,0,0) 48%, rgba(120,104,72,.13) 100%); }
+
+    /* the real particle D, held big and bled off the top — the product's own brand act */
+    /* full-bleed so the shot's own paper IS the ground — no crop edge, and the D lands left of centre */
+    #f03-brand .dwrap { position:absolute; inset:0; overflow:hidden; }
+    #f03-brand .dwrap img { position:absolute; left:-775px; top:-114px; width:2700px; height:auto; }
+
+    #f03-brand .serif {
+      font-family:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+      font-weight:400; color:#28382F;
+    }
+    #f03-brand .bl { position:absolute; left:118px;  top:330px; font-size:104px; letter-spacing:-.012em; }
+    #f03-brand .br { position:absolute; right:118px; top:330px; font-size:104px; letter-spacing:-.012em; }
+
+    #f03-brand .lock { position:absolute; left:1216px; top:520px; width:600px; }
+    #f03-brand .eyebrow {
+      display:block; font-size:21px; letter-spacing:.34em; color:#8C8474; font-weight:500; margin-bottom:22px;
+    }
+    #f03-brand .name {
+      display:block; font-size:118px; font-weight:600; letter-spacing:-.045em; line-height:1; color:#22302A;
+    }
+    #f03-brand .line {
+      display:block; margin-top:26px; font-size:30px; font-weight:400; letter-spacing:-.005em; color:#6B7268; line-height:1.5;
+    }
+    #f03-brand .hair { position:absolute; left:1216px; top:486px; width:132px; height:2px; background:#A86A3C; }
+  </style>
+  <section data-hf-id="hf-txo7" id="f03-stage" class="clip" data-start="0" data-duration="7.6">
+    <div data-hf-id="hf-ygft" class="ground"></div>
+
+    <div data-hf-id="hf-ump0" class="dwrap" id="f03-d"><img data-hf-id="hf-jjwx" src="assets/09-welcome-3.png" alt=""></div>
+
+    <span data-hf-id="hf-tk88" class="serif bl" id="f03-bl">Build</span>
+    <span data-hf-id="hf-z4zd" class="serif br" id="f03-br">with Care</span>
+
+    <div data-hf-id="hf-e4a6" class="vig"></div>
+
+    <div data-hf-id="hf-tjhk" class="hair" id="f03-hair"></div>
+    <div data-hf-id="hf-fhcd" class="lock">
+      <span data-hf-id="hf-n1rq" class="eyebrow" id="f03-eb">DELEGATE　交给它办</span>
+      <span data-hf-id="hf-ua14" class="name" id="f03-name">看着办</span>
+      <span data-hf-id="hf-j776" class="line" id="f03-line">Agent 办事，人看得见，也能介入。</span>
+    </div>
+  </section>
+</div>
+<script>
+  (function () {
+    var tl = gsap.timeline({ paused: true });
+
+    // the two words hold first, then hand themselves to the mark they become
+    tl.fromTo("#f03-bl", { autoAlpha: 0, x: -22 }, { autoAlpha: 1, x: 0, duration: .9, ease: "power3.out" }, 0);
+    tl.fromTo("#f03-br", { autoAlpha: 0, x: 22 },  { autoAlpha: 1, x: 0, duration: .9, ease: "power3.out" }, 0.12);
+
+    tl.fromTo("#f03-d", { autoAlpha: 0, scale: 1.06, transformOrigin: "50% 55%" },
+                        { autoAlpha: 1, scale: 1, duration: 1.6, ease: "power3.out" }, 1.5);
+    tl.to(["#f03-bl", "#f03-br"], { autoAlpha: 0, duration: .9, ease: "power2.inOut" }, 1.7);
+
+    tl.fromTo("#f03-hair", { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: .8, ease: "power3.out" }, 3.3);
+    tl.fromTo("#f03-eb",   { y: 12, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .6, ease: "power3.out" }, 3.45);
+    tl.fromTo("#f03-name", { y: 26, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .9, ease: "power3.out" }, 3.65);
+    tl.fromTo("#f03-line", { y: 18, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .8, ease: "power3.out" }, 4.15);
+
+    tl.to({}, { duration: 7 }, 0);
+    window.__timelines["f03-brand"] = tl;
+  })();
+</script>
+</template>

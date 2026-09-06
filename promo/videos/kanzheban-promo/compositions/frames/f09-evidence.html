@@ -1,0 +1,55 @@
+<template>
+<div data-hf-id="hf-8yxi" id="f09-evidence" data-composition-id="f09-evidence" data-start="0" data-width="1920" data-height="1080" data-duration="7.5">
+  <style>
+    @font-face { font-family:'PingFang SC'; src: local('PingFang SC'); }
+    @font-face { font-family:'PingFang SC'; font-weight:600; src: local('PingFang SC Semibold'); }
+    #f09-evidence {
+      position:relative; width:1920px; height:1080px; overflow:hidden; background:#EDE9E1;
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #f09-evidence .clip { position:absolute; inset:0; }
+    #f09-evidence .ground { position:absolute; inset:0;
+      background: radial-gradient(100% 76% at 50% 2%, #FDFCF9 0%, #F6F3EC 40%, #EBE6DC 74%, #E0DACD 100%);
+    }
+    #f09-evidence .floor { position:absolute; left:0; right:0; bottom:0; height:400px;
+      background: linear-gradient(to bottom, rgba(158,148,130,0), rgba(146,136,118,.18)); }
+    #f09-evidence .kick { position:absolute; font-size:22px; letter-spacing:.32em; color:#A86A3C; font-weight:500; }
+    #f09-evidence .h1 { position:absolute; font-size:58px; font-weight:600; letter-spacing:-.03em; line-height:1.26; color:#212823; }
+    #f09-evidence .tail { position:absolute; font-size:34px; font-weight:400; letter-spacing:-.01em; color:#6B7268; line-height:1.5; }
+    #f09-evidence .sheet { position:absolute; border-radius:22px; overflow:hidden; background:#fff;
+      box-shadow: 0 3px 9px rgba(34,40,36,.06), 0 22px 44px -12px rgba(34,40,36,.16), 0 72px 130px -38px rgba(34,40,36,.28); }
+    #f09-evidence .sheet img { position:absolute; height:auto; }
+    #f09-evidence .rim { position:absolute; inset:0; border-radius:22px; pointer-events:none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.75); }
+    #f09-evidence .kick { left:118px; top:112px; }
+    #f09-evidence .h1   { left:118px; top:160px; width:940px; font-size:54px; }
+    #f09-evidence .tail { left:118px; top:358px; width:560px; font-size:26px; line-height:1.66; }
+    /* one real lane, genuinely full of controlled-check evidence — not a duplicated tile */
+    #f09-evidence .lane { left:1122px; top:96px; width:700px; height:1060px; border-radius:22px 22px 0 0; }
+    #f09-evidence .lane img { left:0; top:0; width:700px; }
+    #f09-evidence .ev   { left:118px; top:470px; width:900px; height:410px; }
+    #f09-evidence .ev img { left:-24px; top:-360px; width:1400px; }  </style>
+  <section data-hf-id="hf-an6j" id="f09-evidence-stage" class="clip" data-start="0" data-duration="7.5">
+    <div data-hf-id="hf-ygft" class="ground"></div>
+    <div data-hf-id="hf-5wej" class="sheet lane" id="f09-evidence-lane"><img data-hf-id="hf-0eww" src="assets/crop-verified.png" alt=""><div data-hf-id="hf-5gs0" class="rim"></div></div>
+    <div data-hf-id="hf-eb2x" class="sheet ev" id="f09-evidence-ev"><img data-hf-id="hf-91jj" src="assets/crop-artifacts.png" alt=""><div data-hf-id="hf-yq6g" class="rim"></div></div>
+    <div data-hf-id="hf-brb8" class="kick" id="f09-evidence-k">已验证</div>
+    <div data-hf-id="hf-3u7t" class="h1" id="f09-evidence-h">一张卡要进「已验证」，只有一条来路。</div>
+    <div data-hf-id="hf-3uyr" class="tail" id="f09-evidence-t">受控检查通过，并记下这份产物的指纹。人工认可只记成人的证据，不改变卡片状态。</div>
+    <div data-hf-id="hf-kk9u" class="floor"></div>
+  </section>
+</div>
+<script>
+  (function () {
+    var tl = gsap.timeline({ paused: true });
+    tl.fromTo("#f09-evidence-k", { y:12, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.6, ease:"power3.out" }, .1);
+    tl.fromTo("#f09-evidence-h", { y:24, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.9, ease:"power3.out" }, .25);
+    tl.fromTo("#f09-evidence-lane", { y:70, autoAlpha:0 }, { y:0, autoAlpha:1, duration:1.2, ease:"power3.out" }, 1.1);
+    tl.fromTo("#f09-evidence-t", { y:16, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.7, ease:"power3.out" }, 2.6);
+    tl.fromTo("#f09-evidence-ev", { y:44, autoAlpha:0 }, { y:0, autoAlpha:1, duration:1.0, ease:"power3.out" }, 3.5);
+    tl.to({}, { duration: 7 }, 0);
+    window.__timelines["f09-evidence"] = tl;
+  })();
+</script>
+</template>

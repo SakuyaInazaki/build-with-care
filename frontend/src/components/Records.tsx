@@ -187,10 +187,12 @@ export function RecordView({
   run,
   update,
   onDeleted,
+  readOnly = false,
 }: {
   run: RunState
   update: (run: RunState) => void
   onDeleted: () => void
+  readOnly?: boolean
 }) {
   const [reflection, setReflection] = useState(run.reflection)
   const [busy, setBusy] = useState(false)
@@ -277,7 +279,7 @@ export function RecordView({
           </p>
         </section>
         <aside>
-          {run.archivedAt ? (
+          {run.archivedAt || readOnly ? (
             <section className="reflection-panel" aria-label="已保存的复盘">
               <h2>留给下次的自己</h2>
               <p>{run.reflection || '尚未保存复盘'}</p>
@@ -322,18 +324,20 @@ export function RecordView({
           <ArrowDownToLine size={16} />
           导出完整记录
         </a>
-        <button
-          className="button text-button delete-task"
-          disabled={isActive(run)}
-          onClick={() => {
-            setDeleting(true)
-            setConfirmText('')
-            setError('')
-          }}
-        >
-          <Trash2 size={15} />
-          删除任务数据
-        </button>
+        {!readOnly && (
+          <button
+            className="button text-button delete-task"
+            disabled={isActive(run)}
+            onClick={() => {
+              setDeleting(true)
+              setConfirmText('')
+              setError('')
+            }}
+          >
+            <Trash2 size={15} />
+            删除任务数据
+          </button>
+        )}
       </div>
       {deleting && (
         <Dialog

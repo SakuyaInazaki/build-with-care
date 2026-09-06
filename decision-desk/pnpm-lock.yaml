@@ -44,6 +44,9 @@ importers:
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.2.8)
+      playwright-core:
+        specifier: 1.62.1
+        version: 1.62.1
       postcss:
         specifier: 8.5.28
         version: 8.5.28

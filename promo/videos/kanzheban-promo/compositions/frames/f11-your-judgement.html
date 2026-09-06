@@ -1,0 +1,95 @@
+<template>
+<div data-hf-id="hf-69u8" id="f11-your-judgement" data-composition-id="f11-your-judgement" data-start="0" data-width="1920" data-height="1080" data-duration="9.4">
+  <style>
+    @font-face { font-family:'PingFang SC'; src: local('PingFang SC'); }
+    @font-face { font-family:'PingFang SC'; font-weight:600; src: local('PingFang SC Semibold'); }
+    #f11-your-judgement {
+      position:relative; width:1920px; height:1080px; overflow:hidden;
+      background:#0B0F0E;
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #f11-your-judgement .clip { position:absolute; inset:0; }
+    #f11-your-judgement .ground {
+      position:absolute; inset:0;
+      background:
+        radial-gradient(110% 85% at 68% 12%, #26332E 0%, #18211E 40%, #0F1413 72%, #0A0E0D 100%);
+    }
+    #f11-your-judgement .vig {
+      position:absolute; inset:0;
+      background: radial-gradient(72% 62% at 34% 46%, rgba(0,0,0,0) 42%, rgba(0,0,0,.5) 100%);
+    }
+    /* the real report, sunk into the dark as evidence behind the claim */
+    #f11-your-judgement .doc {
+      position:absolute; right:-160px; top:70px; width:1180px; height:940px;
+      border-radius:24px; overflow:hidden;
+      box-shadow: 0 60px 140px -30px rgba(0,0,0,.7);
+    }
+    #f11-your-judgement .doc img { display:block; width:1180px; height:auto; filter:blur(3px); }
+    #f11-your-judgement .docveil {
+      position:absolute; inset:0;
+      background: linear-gradient(105deg, rgba(11,15,14,.97) 0%, rgba(11,15,14,.86) 34%, rgba(11,15,14,.60) 100%);
+    }
+    #f11-your-judgement .rule { position:absolute; left:150px; top:236px; width:132px; height:2px; background:#A86A3C; }
+    #f11-your-judgement .kick { position:absolute; left:150px; top:180px; font-size:23px; letter-spacing:.30em; color:#A86A3C; font-weight:500; }
+    #f11-your-judgement .lead { position:absolute; left:150px; top:300px; width:1300px; }
+    #f11-your-judgement .l {
+      display:block; font-size:86px; font-weight:600; letter-spacing:-.03em; line-height:1.34; color:#F4F1EA; white-space:nowrap;
+    }
+    #f11-your-judgement .num { color:#7FD6A8; font-variant-numeric:tabular-nums; }
+    #f11-your-judgement .tail {
+      position:absolute; left:150px; top:800px; width:1240px;
+      font-size:38px; font-weight:400; letter-spacing:-.01em; line-height:1.5; color:#96A39D;
+    }
+    #f11-your-judgement .tail2 {
+      position:absolute; left:150px; top:872px; width:1240px;
+      font-size:38px; font-weight:400; letter-spacing:-.01em; line-height:1.5; color:#6E7B75;
+    }
+  </style>
+  <section data-hf-id="hf-200c" id="f11-stage" class="clip" data-start="0" data-duration="9.4">
+    <div data-hf-id="hf-ygft" class="ground"></div>
+    <div data-hf-id="hf-ohnl" class="doc" id="f11-doc">
+      <img data-hf-id="hf-zuob" src="assets/crop-record.png" alt="">
+      <div data-hf-id="hf-yknq" class="docveil"></div>
+    </div>
+    <div data-hf-id="hf-e4a6" class="vig"></div>
+
+    <div data-hf-id="hf-7hat" class="kick" id="f11-kick">我的判断</div>
+    <div data-hf-id="hf-e50j" class="rule" id="f11-rule"></div>
+    <div data-hf-id="hf-wnrm" class="lead">
+      <span data-hf-id="hf-rnz9" class="l" id="f11-a">这次任务，</span>
+      <span data-hf-id="hf-tqp4" class="l" id="f11-b">你留下了 <span data-hf-id="hf-072d" class="num" id="f11-n1">0</span> 次判断，</span>
+      <span data-hf-id="hf-3a6z" class="l" id="f11-c">其中 <span data-hf-id="hf-2ayc" class="num" id="f11-n2">0</span> 次纠正了做法。</span>
+    </div>
+    <div data-hf-id="hf-8ssb" class="tail2" id="f11-tail2">一年以后，这是你还拿得出的东西。</div>
+    <div data-hf-id="hf-tr8i" class="tail" id="f11-tail">报告不数代码行，只数人在哪几步改了方向。</div>
+  </section>
+</div>
+<script>
+  (function () {
+    var tl = gsap.timeline({ paused: true });
+    var n1 = { v: 0 }, n2 = { v: 0 };
+    var e1 = document.getElementById("f11-n1");
+    var e2 = document.getElementById("f11-n2");
+
+    tl.fromTo("#f11-doc", { autoAlpha: 0, x: 60 }, { autoAlpha: 1, x: 0, duration: 1.4, ease: "power3.out" }, 0);
+    tl.fromTo("#f11-kick", { y: 14, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .6, ease: "power3.out" }, 0.3);
+    tl.fromTo("#f11-rule", { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: .8, ease: "power3.out" }, 0.45);
+
+    tl.fromTo("#f11-a", { y: 28, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .8, ease: "power3.out" }, 1.0);
+    tl.fromTo("#f11-b", { y: 28, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .8, ease: "power3.out" }, 1.9);
+    tl.to(n1, { v: 10, duration: 1.0, ease: "power2.out",
+      onUpdate: function () { e1.textContent = Math.round(n1.v); } }, 2.1);
+
+    tl.fromTo("#f11-c", { y: 28, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .8, ease: "power3.out" }, 3.1);
+    tl.to(n2, { v: 8, duration: 1.0, ease: "power2.out",
+      onUpdate: function () { e2.textContent = Math.round(n2.v); } }, 3.3);
+
+    tl.fromTo("#f11-tail2", { y: 20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .85, ease: "power3.out" }, 6.5);
+    tl.fromTo("#f11-tail",  { y: 22, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .9, ease: "power3.out" }, 5.4);
+
+    tl.to({}, { duration: 9 }, 0);
+    window.__timelines["f11-your-judgement"] = tl;
+  })();
+</script>
+</template>
