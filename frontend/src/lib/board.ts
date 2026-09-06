@@ -45,6 +45,7 @@ export const progressLabels = {
   delivered: '已传达给 Agent',
   acted: '已产生后续改动',
   verified: '对应检查已通过',
+  superseded: '已被后续要求取代',
 }
 export const actionLabels = {
   correct: '改成另一种做法',

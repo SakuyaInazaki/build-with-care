@@ -1,0 +1,66 @@
+<template>
+<div data-hf-id="hf-nd7h" id="f08-four-actions" data-composition-id="f08-four-actions" data-start="0" data-width="1920" data-height="1080" data-duration="8.4">
+  <style>
+    @font-face { font-family:'PingFang SC'; src: local('PingFang SC'); }
+    @font-face { font-family:'PingFang SC'; font-weight:600; src: local('PingFang SC Semibold'); }
+    #f08-four-actions {
+      position:relative; width:1920px; height:1080px; overflow:hidden; background:#EDE9E1;
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #f08-four-actions .clip { position:absolute; inset:0; }
+    #f08-four-actions .ground { position:absolute; inset:0;
+      background: radial-gradient(100% 76% at 50% 2%, #FDFCF9 0%, #F6F3EC 40%, #EBE6DC 74%, #E0DACD 100%);
+    }
+    #f08-four-actions .floor { position:absolute; left:0; right:0; bottom:0; height:400px;
+      background: linear-gradient(to bottom, rgba(158,148,130,0), rgba(146,136,118,.18)); }
+    #f08-four-actions .kick { position:absolute; font-size:22px; letter-spacing:.32em; color:#A86A3C; font-weight:500; }
+    #f08-four-actions .h1 { position:absolute; font-size:58px; font-weight:600; letter-spacing:-.03em; line-height:1.26; color:#212823; }
+    #f08-four-actions .tail { position:absolute; font-size:34px; font-weight:400; letter-spacing:-.01em; color:#6B7268; line-height:1.5; }
+    #f08-four-actions .sheet { position:absolute; border-radius:22px; overflow:hidden; background:#fff;
+      box-shadow: 0 3px 9px rgba(34,40,36,.06), 0 22px 44px -12px rgba(34,40,36,.16), 0 72px 130px -38px rgba(34,40,36,.28); }
+    #f08-four-actions .sheet img { position:absolute; height:auto; }
+    #f08-four-actions .rim { position:absolute; inset:0; border-radius:22px; pointer-events:none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.75); }
+    #f08-four-actions .kick { left:118px; top:112px; }
+    #f08-four-actions .h1   { left:118px; top:160px; width:1500px; }
+    #f08-four-actions .row  { position:absolute; left:118px; width:1684px; }
+    #f08-four-actions .row .nm { position:absolute; left:0; top:0; font-size:52px; font-weight:600; letter-spacing:-.02em; color:#212823; }
+    #f08-four-actions .row .ct { position:absolute; right:0; top:8px; font-size:40px; font-weight:400; color:#6B7268; font-variant-numeric:tabular-nums; }
+    #f08-four-actions .row .ln { position:absolute; left:0; right:0; top:86px; height:1px; background:#CFC7B6; }
+    #f08-four-actions .tail { left:118px; top:906px; }  </style>
+  <section data-hf-id="hf-uy90" id="f08-four-actions-stage" class="clip" data-start="0" data-duration="8.4">
+    <div data-hf-id="hf-ygft" class="ground"></div>
+    <div data-hf-id="hf-iw5m" class="row" id="f08-four-actions-R0" style="top:340px">
+      <span data-hf-id="hf-nq2l" class="nm">按原要求改正</span><span data-hf-id="hf-jhjx" class="ct">6 次</span><span data-hf-id="hf-smev" class="ln"></span>
+    </div>
+    <div data-hf-id="hf-l29e" class="row" id="f08-four-actions-R1" style="top:468px">
+      <span data-hf-id="hf-l00d" class="nm">改成另一种做法</span><span data-hf-id="hf-fjg1" class="ct">2 次</span><span data-hf-id="hf-oupj" class="ln"></span>
+    </div>
+    <div data-hf-id="hf-oc9v" class="row" id="f08-four-actions-R2" style="top:596px">
+      <span data-hf-id="hf-wab7" class="nm">仅本次允许</span><span data-hf-id="hf-aomd" class="ct">2 次</span><span data-hf-id="hf-ogei" class="ln"></span>
+    </div>
+    <div data-hf-id="hf-dfzr" class="row" id="f08-four-actions-R3" style="top:724px">
+      <span data-hf-id="hf-2gos" class="nm">停止任务</span><span data-hf-id="hf-o23h" class="ln"></span>
+    </div>
+    <div data-hf-id="hf-57qm" class="kick" id="f08-four-actions-k">红卡的四档裁决</div>
+    <div data-hf-id="hf-9rde" class="h1" id="f08-four-actions-h">停下来之后，你有四个动作。</div>
+    <div data-hf-id="hf-ae68" class="tail" id="f08-four-actions-t">这一次任务里，你用了 10 次。</div>
+    <div data-hf-id="hf-kk9u" class="floor"></div>
+  </section>
+</div>
+<script>
+  (function () {
+    var tl = gsap.timeline({ paused: true });
+    tl.fromTo("#f08-four-actions-k", { y:12, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.6, ease:"power3.out" }, .1);
+    tl.fromTo("#f08-four-actions-h", { y:24, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.9, ease:"power3.out" }, .25);
+    tl.fromTo("#f08-four-actions-R0", { y:26, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.8, ease:"power3.out" }, 1.5);
+    tl.fromTo("#f08-four-actions-R1", { y:26, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.8, ease:"power3.out" }, 2.45);
+    tl.fromTo("#f08-four-actions-R2", { y:26, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.8, ease:"power3.out" }, 3.4);
+    tl.fromTo("#f08-four-actions-R3", { y:26, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.8, ease:"power3.out" }, 4.35);
+    tl.fromTo("#f08-four-actions-t", { y:18, autoAlpha:0 }, { y:0, autoAlpha:1, duration:.8, ease:"power3.out" }, 5.9);
+    tl.to({}, { duration: 8 }, 0);
+    window.__timelines["f08-four-actions"] = tl;
+  })();
+</script>
+</template>

@@ -41,12 +41,14 @@ export function Board({
   stop,
   notify,
   canRecheck = false,
+  readOnly = false,
 }: {
   run: RunState
   update: (run: RunState) => void
   stop: () => Promise<void>
   notify: (text: string) => void
   canRecheck?: boolean
+  readOnly?: boolean
 }) {
   const items = useMemo(() => boardItems(run), [run])
   const [selected, setSelected] = useState<string | null>(null)
@@ -79,7 +81,7 @@ export function Board({
           <span className="muted">{constraints.length} 条</span>
           <ChevronDown className={constraintsOpen ? 'rotated' : ''} size={15} />
         </button>
-        {!run.archivedAt && (
+        {!run.archivedAt && !readOnly && (
           <button
             className="button text-button"
             onClick={() => setAdding(!adding)}

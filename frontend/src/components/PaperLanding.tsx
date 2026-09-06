@@ -3,6 +3,7 @@ import type { BufferGeometry, ShaderMaterial, Vector3, WebGLRenderer } from 'thr
 import '../paper-landing.css'
 
 interface PaperLandingProps {
+  onEnterStart: () => void
   onEnter: () => void
 }
 
@@ -24,7 +25,7 @@ export function PaperLandingPrelude() {
   )
 }
 
-export function PaperLanding({ onEnter }: PaperLandingProps) {
+export function PaperLanding({ onEnterStart, onEnter }: PaperLandingProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const storyRef = useRef<HTMLElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -34,11 +35,16 @@ export function PaperLanding({ onEnter }: PaperLandingProps) {
   const bottomBarRef = useRef<HTMLDivElement>(null)
   const entryRef = useRef<HTMLDivElement>(null)
   const leaveTimerRef = useRef<number | undefined>(undefined)
+  const leaveRafRef = useRef<number | undefined>(undefined)
+  const enteringRef = useRef(false)
   const [three, setThree] = useState<typeof import('three') | null>(null)
   const [ready, setReady] = useState(false)
+  const [preparing, setPreparing] = useState(false)
   const [leaving, setLeaving] = useState(false)
 
   useEffect(() => {
+    const root = document.documentElement
+    root.classList.add('paper-landing-active')
     let mounted = true
     void import('three').then((module) => {
       if (mounted) setThree(module)
@@ -46,6 +52,8 @@ export function PaperLanding({ onEnter }: PaperLandingProps) {
     return () => {
       mounted = false
       window.clearTimeout(leaveTimerRef.current)
+      if (leaveRafRef.current !== undefined) cancelAnimationFrame(leaveRafRef.current)
+      root.classList.remove('paper-landing-active', 'paper-landing-transitioning')
     }
   }, [])
 
@@ -417,14 +425,30 @@ export function PaperLanding({ onEnter }: PaperLandingProps) {
   }, [three])
 
   const enterWorkspace = () => {
-    if (!ready || leaving) return
-    setLeaving(true)
+    if (!ready || enteringRef.current) return
+    enteringRef.current = true
+    setPreparing(true)
+    onEnterStart()
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    leaveTimerRef.current = window.setTimeout(onEnter, reduced ? 120 : 680)
+    let frames = reduced ? 1 : 2
+    const prepareFrame = () => {
+      frames -= 1
+      if (frames > 0) {
+        leaveRafRef.current = requestAnimationFrame(prepareFrame)
+        return
+      }
+      leaveRafRef.current = undefined
+      setLeaving(true)
+      document.documentElement.classList.add('paper-landing-transitioning')
+      leaveTimerRef.current = window.setTimeout(onEnter, reduced ? 0 : 420)
+    }
+    leaveRafRef.current = requestAnimationFrame(prepareFrame)
   }
 
   return (
-    <main className={`paper-landing ${leaving ? 'is-leaving' : ''}`}>
+    <main
+      className={`paper-landing ${preparing ? 'is-preparing' : ''} ${leaving ? 'is-leaving' : ''}`}
+    >
       <div className="paper-landing__scroll" ref={scrollRef} tabIndex={0}>
         <section
           className="paper-landing__story"
@@ -454,7 +478,13 @@ export function PaperLanding({ onEnter }: PaperLandingProps) {
               <p className="paper-landing__entry-name">
                 DELEGATE<span>交给它办</span>
               </p>
-              <button type="button" onClick={enterWorkspace} tabIndex={ready ? 0 : -1}>
+              <button
+                type="button"
+                onClick={enterWorkspace}
+                disabled={preparing}
+                aria-busy={preparing}
+                tabIndex={ready ? 0 : -1}
+              >
                 进入「看着办」 <span aria-hidden="true">→</span>
               </button>
             </div>
@@ -464,7 +494,6 @@ export function PaperLanding({ onEnter }: PaperLandingProps) {
           </div>
         </section>
       </div>
-      <div className="paper-landing__departure" aria-hidden="true" />
       <p className="paper-landing__sr-only" role="status" aria-live="polite">
         {ready ? '字母 D 已汇聚完成，可以进入看着办。' : ''}
       </p>

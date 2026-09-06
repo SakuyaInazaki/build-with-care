@@ -382,6 +382,75 @@ export class Manager {
       this.continuing.delete(id)
     }
   }
+  async continueRun(
+    id: string,
+    input: { requestId: string; revision: number; instruction: string },
+    options?: RuntimeOptions,
+  ) {
+    const state = this.assertMutable(id)
+    const prior = this.store
+      .events(id)
+      .find(
+        (event) =>
+          event.type === 'run.continuation-requested' &&
+          (event.data as { requestId?: string }).requestId === input.requestId,
+      )
+    if (prior) {
+      const data = prior.data as { revision?: number; instruction?: string }
+      if (data.revision !== input.revision || data.instruction !== input.instruction)
+        throw new ConflictError('同一个请求标识不能用于不同的继续执行指令。')
+      return state
+    }
+    if (input.revision !== state.revision) throw new ConflictError('要求已更新，请重新确认后继续。')
+    if (!['completed', 'interrupted', 'stopped', 'error'].includes(state.status))
+      throw new ConflictError('请等待当前任务结束后再下达继续执行指令。')
+    if (this.continuing.has(id) || this.grilling.has(id))
+      throw new ConflictError('任务正在切换状态，请稍候。')
+    const existing = this.runtimes.get(id)
+    if (existing && !existing.isIdleForArchive())
+      throw new ConflictError('任务仍有执行调用正在收尾，请稍候再继续。')
+    if (state.gates.some((gate) => gate.status === 'pending'))
+      throw new ConflictError('任务仍有待处理决定，不能开始新的继续执行。')
+    if (state.grill && state.grill.status !== 'confirmed')
+      throw new ConflictError('任务的需求确认尚未完成，不能继续执行。')
+    if (state.workUnits?.some((unit) => ['declared', 'active'].includes(unit.status)))
+      throw new ConflictError('任务仍有未关闭的工作单元，不能继续执行。')
+    if (
+      this.list().some(
+        (item) => item.id !== id && ['running', 'waiting', 'stopping'].includes(item.status),
+      )
+    )
+      throw new ConflictError('另一个任务正在执行，请先结束它再继续本任务。')
+    if (state.mode === 'live' && !this.configured())
+      throw new ConflictError('请先配置模型，再继续任务。')
+    this.continuing.add(id)
+    try {
+      const disposing = existing?.dispose()
+      const previousStatus = state.status
+      state.status = 'running'
+      await disposing
+      const runtime = new DecisionRuntime(
+        state,
+        this.store,
+        structuredClone(this.settings),
+        this.publish,
+        {
+          ...options,
+          continuation: true,
+          runInstruction: { requestId: input.requestId, text: input.instruction },
+          includeOutstandingCorrections: true,
+          currentSettings: () => this.settings,
+        },
+      )
+      this.runtimes.set(id, runtime)
+      state.error = undefined
+      runtime.commit('run.continuation-requested', { ...input, previousStatus })
+      await runtime.start()
+      return state
+    } finally {
+      this.continuing.delete(id)
+    }
+  }
   verifyArtifacts(id: string, input: { requestId: string; revision: number }) {
     const state = this.assertMutable(id)
     if (

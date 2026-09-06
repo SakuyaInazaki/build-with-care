@@ -15,5 +15,21 @@ store/
 .env
 .env.*
 !.env.example
+!.env.deploy.example
 *.log
 *.tmp
+release/
+.env.deploy
+
+# 宣传片工程：源文件进库；抓取素材、渲染成品与中间产物不进（合计约 95M）
+promo/videos/*/capture/
+promo/videos/*/assets/
+promo/videos/*/renders/
+promo/videos/*/snapshots/
+promo/videos/*/.thumbnails/
+promo/videos/*/.media/
+promo/videos/*/.hyperframes/
+promo/videos/*/node_modules/
+
+# 第三方视频技能包（含 36M mp3 素材），不是本项目源码
+design/

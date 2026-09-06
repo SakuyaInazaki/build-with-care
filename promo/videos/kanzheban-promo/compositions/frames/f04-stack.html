@@ -1,0 +1,130 @@
+<template>
+<div data-hf-id="hf-j13k" id="f04-stack" data-composition-id="f04-stack" data-start="0" data-width="1920" data-height="1080" data-duration="12.5">
+  <style>
+    @font-face { font-family:'PingFang SC'; src: local('PingFang SC'); }
+    @font-face { font-family:'PingFang SC'; font-weight:600; src: local('PingFang SC Semibold'); }
+    #f04-stack {
+      position:relative; width:1920px; height:1080px; overflow:hidden; background:#080B0A;
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC',sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #f04-stack .clip { position:absolute; inset:0; }
+    #f04-stack .ground {
+      position:absolute; inset:0;
+      background:
+        radial-gradient(120% 95% at 30% 4%, #223029 0%, #16201C 34%, #0D1211 66%, #080B0A 100%),
+        radial-gradient(60% 50% at 84% 88%, rgba(168,106,60,.12) 0%, rgba(168,106,60,0) 60%);
+    }
+    #f04-stack .vig { position:absolute; inset:0;
+      background: radial-gradient(80% 70% at 50% 46%, rgba(0,0,0,0) 44%, rgba(0,0,0,.55) 100%); }
+
+    /* the exploded stack: one perspective stage, one posed world, five product planes */
+    #f04-stack .stage { position:absolute; inset:0; perspective:2600px; perspective-origin:66% 50%; }
+    /* the stack lives in the right two-thirds; the caption column owns the left */
+    #f04-stack .world {
+      position:absolute; left:66%; top:58%; width:0; height:0;
+      transform-style:preserve-3d;
+    }
+    #f04-stack .layer {
+      position:absolute; left:-550px; top:-300px; width:1100px; height:600px;
+      border-radius:22px; overflow:hidden; transform-style:preserve-3d;
+      background:#F6F6F8;
+      box-shadow: 0 40px 90px -20px rgba(0,0,0,.66), 0 6px 18px rgba(0,0,0,.32);
+    }
+    /* every plane is shown WHOLE and small — at stack scale no layer's text is legible.
+       The structure is said by the stack; the meaning is said by the caption column.
+       This is also why the task's own prose never becomes the subject of the frame. */
+    #f04-stack .layer img { position:absolute; left:0; width:1100px; height:auto; }
+    #f04-stack #f04-L1 img { top:-10px; }
+    #f04-stack #f04-L2 img { top:56px; }
+    #f04-stack #f04-L3 img { top:102px; }
+    #f04-stack #f04-L4 img { top:-10px; }
+    #f04-stack #f04-L5 img { top:-10px; }
+    #f04-stack .layer .rim {
+      position:absolute; inset:0; border-radius:22px; pointer-events:none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.62), inset 0 0 0 2px rgba(40,56,47,.10);
+    }
+    /* a warm key skimming each plane from the upper-left, the way a lit object reads */
+    #f04-stack .layer .key {
+      position:absolute; inset:0; pointer-events:none;
+      background: linear-gradient(128deg, rgba(255,255,255,.34) 0%, rgba(255,255,255,0) 38%);
+      mix-blend-mode:screen;
+    }
+    #f04-stack .layer .dim { position:absolute; inset:0; background:rgba(8,11,10,.55); pointer-events:none; }
+
+    /* frame-level layer captions — the product's own vocabulary, never invented */
+    #f04-stack .caps { position:absolute; left:104px; top:352px; width:430px; }
+    #f04-stack .cap { display:block; margin-bottom:22px; }
+    #f04-stack .cap b {
+      display:block; font-size:31px; font-weight:600; letter-spacing:-.01em; color:#F1EEE7; line-height:1.3;
+    }
+    #f04-stack .cap span { display:block; font-size:19px; color:#7E8B84; letter-spacing:.01em; margin-top:4px; }
+    #f04-stack .cap i {
+      font-style:normal; font-size:17px; letter-spacing:.22em; color:#A86A3C; font-weight:600;
+    }
+    #f04-stack .kick { position:absolute; left:104px; top:150px; font-size:22px; letter-spacing:.32em; color:#A86A3C; font-weight:500; }
+    #f04-stack .h1 { position:absolute; left:104px; top:196px; width:620px;
+      font-size:56px; font-weight:600; letter-spacing:-.03em; line-height:1.24; color:#F4F1EA; }
+  </style>
+  <section data-hf-id="hf-oupu" id="f04-stage" class="clip" data-start="0" data-duration="12.5">
+    <div data-hf-id="hf-ygft" class="ground"></div>
+
+    <div data-hf-id="hf-tan6" class="stage">
+      <div data-hf-id="hf-ahmj" class="world" id="f04-world">
+        <div data-hf-id="hf-8xqb" class="layer" id="f04-L1"><img data-hf-id="hf-jl60" src="assets/01-overview.png" alt=""><div data-hf-id="hf-l8jp" class="key"></div><div data-hf-id="hf-qvha" class="dim" id="f04-D1"></div><div data-hf-id="hf-5gs0" class="rim"></div></div>
+        <div data-hf-id="hf-09ug" class="layer" id="f04-L2"><img data-hf-id="hf-rbpq" src="assets/crop-board.png" alt=""><div data-hf-id="hf-k53t" class="key"></div><div data-hf-id="hf-mxd9" class="dim" id="f04-D2"></div><div data-hf-id="hf-yq6g" class="rim"></div></div>
+        <div data-hf-id="hf-11i9" class="layer" id="f04-L3"><img data-hf-id="hf-63dn" src="assets/crop-detail.png" alt=""><div data-hf-id="hf-lc0w" class="key"></div><div data-hf-id="hf-jy3o" class="dim" id="f04-D3"></div><div data-hf-id="hf-xj9d" class="rim"></div></div>
+        <div data-hf-id="hf-sdme" class="layer" id="f04-L4"><img data-hf-id="hf-2pxn" src="assets/06-artifacts.png" alt=""><div data-hf-id="hf-kxpv" class="key"></div><div data-hf-id="hf-7fl7" class="dim" id="f04-D4"></div><div data-hf-id="hf-xxke" class="rim"></div></div>
+        <div data-hf-id="hf-wbqf" class="layer" id="f04-L5"><img data-hf-id="hf-zuob" src="assets/crop-record.png" alt=""><div data-hf-id="hf-iy6q" class="key"></div><div data-hf-id="hf-3hh6" class="dim" id="f04-D5"></div><div data-hf-id="hf-wqnb" class="rim"></div></div>
+      </div>
+    </div>
+
+    <div data-hf-id="hf-e4a6" class="vig"></div>
+
+    <div data-hf-id="hf-yvs4" class="kick" id="f04-kick">看着办</div>
+    <div data-hf-id="hf-p1fa" class="h1" id="f04-h1">一个工作台，五层。</div>
+    <div data-hf-id="hf-br8j" class="caps">
+      <span data-hf-id="hf-i9ui" class="cap" id="f04-C1"><i data-hf-id="hf-b7wv">01</i><b data-hf-id="hf-qxbu">工作空间</b><span data-hf-id="hf-4g51">你交代事情的地方</span></span>
+      <span data-hf-id="hf-c44p" class="cap" id="f04-C2"><i data-hf-id="hf-atlu">02</i><b data-hf-id="hf-m8ji">决策看板</b><span data-hf-id="hf-vriy">四栏：需要你判断 · 正在推进 · 等待验证 · 已验证</span></span>
+      <span data-hf-id="hf-bcgw" class="cap" id="f04-C3"><i data-hf-id="hf-afat">03</i><b data-hf-id="hf-wt4f">对账详情</b><span data-hf-id="hf-a676">你的要求 ／ Agent 的行动</span></span>
+      <span data-hf-id="hf-7ecv" class="cap" id="f04-C4"><i data-hf-id="hf-d7g0">04</i><b data-hf-id="hf-chzy">成果与验证</b><span data-hf-id="hf-kb66">受控检查给出的证据</span></span>
+      <span data-hf-id="hf-3g8u" class="cap" id="f04-C5"><i data-hf-id="hf-ct4z">05</i><b data-hf-id="hf-vjm3">我的判断</b><span data-hf-id="hf-zcrr">这场会话里，人做了什么</span></span>
+    </div>
+  </section>
+</div>
+<script>
+  (function () {
+    var tl = gsap.timeline({ paused: true });
+    var L = ["#f04-L1", "#f04-L2", "#f04-L3", "#f04-L4", "#f04-L5"];
+    var C = ["#f04-C1", "#f04-C2", "#f04-C3", "#f04-C4", "#f04-C5"];
+    var D = ["#f04-D1", "#f04-D2", "#f04-D3", "#f04-D4", "#f04-D5"];
+
+    // the world is posed once and holds — a corner view, so the stack's depth reads
+    tl.fromTo("#f04-world",
+      { rotateX: 15, rotateY: -25, rotateZ: 0, scale: .80, y: 52 },
+      { rotateX: 10, rotateY: -19, rotateZ: 0, scale: .88, y: 0, duration: 11, ease: "power1.inOut" }, 0);
+
+    tl.fromTo("#f04-kick", { y: 12, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .6, ease: "power3.out" }, 0.1);
+    tl.fromTo("#f04-h1",   { y: 22, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .9, ease: "power3.out" }, 0.25);
+
+    // each layer rises into its slot in the order the product actually works
+    for (var i = 0; i < 5; i += 1) {
+      var t = 1.1 + i * 1.75;
+      var z = i * 116;          // separation along the stack axis
+      var lift = -i * 96;       // and up the frame, so every layer stays visible
+      tl.fromTo(L[i],
+        { z: z - 240, y: lift + 150, autoAlpha: 0 },
+        { z: z, y: lift, autoAlpha: 1, duration: 1.15, ease: "power3.out" }, t);
+      tl.fromTo(C[i], { x: -18, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .7, ease: "power3.out" }, t + 0.15);
+      // the layer that just landed is the lit one; the ones below sink back
+      tl.fromTo(D[i], { autoAlpha: .55 }, { autoAlpha: 0, duration: .7, ease: "power2.out" }, t);
+      if (i > 0) tl.to(D[i - 1], { autoAlpha: .34, duration: .7, ease: "power2.out" }, t);
+      if (i > 0) tl.to(C[i - 1] + " b", { color: "#6E7B75", duration: .7, ease: "power2.out" }, t);
+      if (i > 0) tl.to(C[i - 1] + " span", { autoAlpha: .35, duration: .7, ease: "power2.out" }, t);
+    }
+
+    tl.to({}, { duration: 12 }, 0);
+    window.__timelines["f04-stack"] = tl;
+  })();
+</script>
+</template>
