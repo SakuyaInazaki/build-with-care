@@ -31,5 +31,3 @@ promo/videos/*/.media/
 promo/videos/*/.hyperframes/
 promo/videos/*/node_modules/
 
-# 第三方视频技能包（含 36M mp3 素材），不是本项目源码
-design/
